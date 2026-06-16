@@ -1,90 +1,96 @@
-# Project Manager Roadmap Application
+# Приложение для дорожной карты проекта
 
-A Dockerized web application for project managers to plan, track, and visualize project roadmaps. The UI is in **Russian**; demo data is imported from `data/DataMarts.xlsx` (data-marts registry).
+Веб-приложение в Docker для менеджеров проектов: планирование, отслеживание и визуализация дорожных карт. Интерфейс на **русском языке**; демо-данные импортируются из `data/DataMarts.xlsx` (реестр витрин данных).
 
-## Features
+## Возможности
 
-### Views (single project, shared data)
+### Представления (один проект, общие данные)
 
-| View | Description |
-|------|-------------|
-| **Gantt** | Drag task bars and milestones; dependency arrows; date-shift indicators; priority badges and filter |
-| **Timeline** | Editable dates per task; category swimlanes; indicative ranges |
-| **Kanban** | Drag cards between status columns |
-| **Table** | Spreadsheet-style inline editing; category grouping |
-| **Backlog** | Auto-sorted list by RICE, Value/Effort, or MoSCoW |
-| **Release board** | Kanban-style columns per release; drag tasks between releases |
+| Представление | Описание |
+|---------------|----------|
+| **Gantt** | Перетаскивание полос задач и вех; стрелки зависимостей; индикаторы сдвига дат; бейджи приоритета и фильтр |
+| **Timeline** | Редактируемые даты по задачам; swimlane по категориям; индикативные диапазоны |
+| **Kanban** | Перетаскивание карточек между колонками статусов |
+| **Table** | Табличное редактирование в стиле электронной таблицы; группировка по категориям |
+| **Backlog** | Автосортировка по RICE, Value/Effort или MoSCoW |
+| **Release board** | Колонки Kanban по релизам; перетаскивание задач между релизами |
 
-### Task & schedule
+### Задачи и расписание
 
-- **Task management** — edit in the table, property drawer, or by dragging on Gantt/Timeline
-- **Local save bar** — changes are staged locally; click **Сохранить** to persist (optimistic locking via `version`)
-- **Dependency cascade** — shifting a predecessor auto-shifts successors (finish-to-start)
-- **Partial completion** — sub-stage checklists (Этапы) with progress bars; add new stages from the drawer
-- **Dual timelines** — committed (solid) vs indicative (dashed); toggle **Индикативные сроки**
-- **Date-shift tracking** — red/green arrows when dates change; optional comments on why dates moved
+- **Управление задачами** — редактирование в таблице, боковой панели свойств или перетаскиванием на Gantt/Timeline
+- **Локальная панель сохранения** — изменения накапливаются локально; нажмите **Сохранить**, чтобы записать в БД (оптимистическая блокировка через `version`)
+- **Каскад зависимостей** — сдвиг предшественника автоматически сдвигает последователей (finish-to-start)
+- **Частичное выполнение** — чек-листы подэтапов (Этапы) с полосами прогресса; новые этапы добавляются из боковой панели
+- **Два типа сроков** — обязательные (сплошная линия) и индикативные (пунктир); переключатель **Индикативные сроки**
+- **Учёт сдвига дат** — красные/зелёные стрелки при изменении дат; необязательные комментарии о причинах переноса
 
-### Organization
+### Организация
 
-- **Categories (БВ)** — color coding or swimlane grouping on Gantt, Timeline, and Table
-- **Collapsed groups** — aggregated actual + indicative date ranges on swimlane headers
-- **Milestones** — diamond markers on Gantt/Timeline
-- **Shared sources (Источники)** — reuse one data source (`Источник`) across multiple usages; shared dates, stages, and status sync across all linked rows (import deduplicates by source)
-- **Releases** — group tasks into releases with target dates; release board view
-- **Goals** — link tasks to project-level goals
-- **Backlog scoring** — RICE, Value/Effort, MoSCoW fields with computed sort scores
+- **Категории (БВ)** — цветовая кодировка или группировка swimlane на Gantt, Timeline и в таблице
+- **Свёрнутые группы** — агрегированные фактические и индикативные диапазоны дат в заголовках swimlane
+- **Вехи** — ромбовидные маркеры на Gantt/Timeline
+- **Общие источники (Источники)** — один источник данных (`Источник`) для нескольких использований; общие даты, этапы и синхронизация статуса по всем связанным строкам (при импорте дубликаты по источнику объединяются)
+- **Релизы** — группировка задач по релизам с целевыми датами; представление release board
+- **Цели** — привязка задач к целям уровня проекта
+- **Оценка backlog** — поля RICE, Value/Effort, MoSCoW с вычисляемым итоговым баллом для сортировки
 
-### Projects & data
+### Проекты и данные
 
-- **Multi-project** — start page to select or create projects
-- **Excel import** — seed project **«Витрины данных»** from `data/DataMarts.xlsx` (categories = БВ, usages per row, shared components per Источник)
-- **History & audit** — immutable log of date, cost, effort, and status changes
-- **Comments** — per-task activity with timestamps
+- **Несколько проектов** — стартовая страница для выбора или создания проекта
+- **Импорт из Excel** — проект **«Витрины данных»** заполняется из `data/DataMarts.xlsx` (категории = БВ, использования по строкам, общие компоненты по Источнику)
+- **История и аудит** — неизменяемый журнал изменений дат, стоимости, трудозатрат и статусов
+- **Комментарии** — активность по задаче с метками времени
 
-## Quick start
+## Руководство пользователя
+
+Подробная инструкция по работе с интерфейсом — все представления, сохранение изменений, зависимости, общие источники, бэклог и типичные сценарии:
+
+**[USER_GUIDE.md](USER_GUIDE.md)**
+
+## Быстрый старт
 
 ```bash
 docker compose down --remove-orphans
 docker compose up --build
 ```
 
-Open **http://localhost:8080** in your browser.
+Откройте в браузере **http://localhost:8080**.
 
-> **Important:** Use port **8080**, not 8000. Port 80 may show a default nginx page if another web server is installed on your Mac.
+> **Важно:** используйте порт **8080**, а не 8000. Порт 80 может показывать страницу nginx по умолчанию, если на Mac установлен другой веб-сервер.
 
-On first visit:
+При первом посещении:
 
-1. Enter your display name (used for audit attribution).
-2. Select or create a project on the start page, then click **Открыть проект**.
+1. Введите отображаемое имя (используется в аудите).
+2. На стартовой странице выберите или создайте проект, затем нажмите **Открыть проект**.
 
-The demo project **«Витрины данных»** is seeded automatically from `data/DataMarts.xlsx` on first run.
+Демо-проект **«Витрины данных»** автоматически создаётся из `data/DataMarts.xlsx` при первом запуске.
 
-### Re-import spreadsheet data
+### Повторный импорт таблицы
 
-After editing `data/DataMarts.xlsx`:
+После правок в `data/DataMarts.xlsx`:
 
 ```bash
 SEED_REPLACE=1 docker compose run --rm backend python -m app.seed
 ```
 
-This replaces the existing **«Витрины данных»** project with freshly imported tasks and shared components.
+Команда заменяет существующий проект **«Витрины данных»** свежим импортом задач и общих компонентов.
 
-## Architecture
+## Архитектура
 
-| Service  | Port | Description |
-|----------|------|-------------|
-| nginx    | 8080 | React SPA + API proxy (open this in the browser) |
-| backend  | 8000 | FastAPI REST API (internal only) |
-| db       | 5432 | PostgreSQL 16 (internal) |
+| Сервис | Порт | Описание |
+|--------|------|----------|
+| nginx | 8080 | React SPA + прокси API (открывайте в браузере) |
+| backend | 8000 | REST API на FastAPI (только внутри Docker) |
+| db | 5432 | PostgreSQL 16 (только внутри Docker) |
 
 ```
 Browser → nginx:8080 → /api/* → backend:8000 → PostgreSQL
-                      → /*     → React static files
+                      → /*     → статические файлы React
 ```
 
-`data/` is mounted read-only at `/app/import-data` in the backend container for seed import.
+Каталог `data/` монтируется только для чтения в `/app/import-data` в контейнере backend для seed-импорта.
 
-## Development
+## Разработка
 
 ### Backend
 
@@ -105,48 +111,48 @@ npm install
 npm run dev
 ```
 
-Vite dev server proxies `/api` to `http://localhost:8000`.
+Dev-сервер Vite проксирует `/api` на `http://localhost:8000`.
 
-### Tests
+### Тесты
 
 ```bash
 cd backend
 pytest tests/
 ```
 
-## API overview
+## Обзор API
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/health` | Health check |
-| `GET /api/projects` | List projects |
-| `POST /api/projects` | Create project |
-| `GET /api/projects/{id}` | Full project (tasks, categories, components, releases, goals, milestones, dependencies) |
-| `PATCH /api/tasks/{id}` | Update task (`version` required; returns affected successors) |
-| `GET/POST /api/tasks/{id}/sub-stages` | List or create stages (updates shared component stages when linked) |
-| `GET /api/projects/{id}/components` | List shared data sources |
-| `POST /api/tasks/{id}/link-component/{component_id}` | Link task to shared source |
-| `POST /api/tasks/{id}/unlink-component` | Detach task (copies shared data locally) |
-| `GET /api/tasks/{id}/history` | Task audit log |
-| `GET /api/projects/{id}/audit` | Project audit log |
-| `GET/POST /api/projects/{id}/releases` | Release CRUD |
-| `GET/POST /api/projects/{id}/goals` | Goal CRUD |
+| Endpoint | Описание |
+|----------|----------|
+| `GET /api/health` | Проверка работоспособности |
+| `GET /api/projects` | Список проектов |
+| `POST /api/projects` | Создание проекта |
+| `GET /api/projects/{id}` | Полный проект (задачи, категории, компоненты, релизы, цели, вехи, зависимости) |
+| `PATCH /api/tasks/{id}` | Обновление задачи (обязателен `version`; возвращает затронутых последователей) |
+| `GET/POST /api/tasks/{id}/sub-stages` | Список или создание этапов (обновляет этапы общего компонента при связи) |
+| `GET /api/projects/{id}/components` | Список общих источников данных |
+| `POST /api/tasks/{id}/link-component/{component_id}` | Привязка задачи к общему источнику |
+| `POST /api/tasks/{id}/unlink-component` | Отвязка задачи (копирует общие данные локально) |
+| `GET /api/tasks/{id}/history` | Журнал аудита задачи |
+| `GET /api/projects/{id}/audit` | Журнал аудита проекта |
+| `GET/POST /api/projects/{id}/releases` | CRUD релизов |
+| `GET/POST /api/projects/{id}/goals` | CRUD целей |
 
-Send the `X-User-Name` header with write requests for audit attribution.
+Для операций записи передавайте заголовок `X-User-Name` — он используется для атрибуции в аудите.
 
-## Environment variables
+## Переменные окружения
 
-| Variable | Default |
-|----------|---------|
+| Переменная | Значение по умолчанию |
+|------------|------------------------|
 | `DATABASE_URL` | `postgresql://roadmap:roadmap@db:5432/roadmap` |
-| `SEED_REPLACE` | Set to `1` when running seed to replace existing demo project |
+| `SEED_REPLACE` | Установите `1` при запуске seed, чтобы заменить существующий демо-проект |
 
-## Project layout
+## Структура проекта
 
 ```
-backend/          FastAPI app, Alembic migrations, DataMarts import
-frontend/         React + TypeScript (Vite), Russian locale in src/locale/ru.ts
-data/             DataMarts.xlsx — seed input (also mounted in Docker)
-nginx/            Static SPA + reverse proxy
+backend/          FastAPI, миграции Alembic, импорт DataMarts
+frontend/         React + TypeScript (Vite), локаль ru.ts в src/locale/
+data/             DataMarts.xlsx — входные данные для seed (также монтируется в Docker)
+nginx/            Статика SPA + обратный прокси
 docker-compose.yml
 ```
