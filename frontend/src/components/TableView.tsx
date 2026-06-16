@@ -99,6 +99,7 @@ interface Props {
 export function TableView({ project }: Props) {
   const createTask = useCreateTask(project.id)
   const deleteTask = useDeleteTask(project.id)
+  const selectedTaskId = useUIStore((s) => s.selectedTaskId)
   const setSelectedTaskId = useUIStore((s) => s.setSelectedTaskId)
   const groupingMode = useUIStore((s) => s.groupingMode)
   const showIndicative = useUIStore((s) => s.showIndicative)
@@ -109,25 +110,24 @@ export function TableView({ project }: Props) {
   const effectiveTasks = useEffectiveTasks(project.tasks)
   const pendingIds = usePendingTaskIds(project.tasks)
   const [error, setError] = useState<string | null>(null)
-  const [deletingTaskId, setDeletingTaskId] = useState<number | null>(null)
 
   const baseTasksById = useMemo(() => new Map(project.tasks.map((t) => [t.id, t])), [project.tasks])
 
-  const handleDeleteTask = useCallback(
-    async (task: Task) => {
-      if (!confirm(ru.drawer.deleteTaskConfirm(task.name))) return
-      setError(null)
-      setDeletingTaskId(task.id)
-      try {
-        await deleteTask.mutateAsync(task.id)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : ru.saveBar.failed)
-      } finally {
-        setDeletingTaskId(null)
-      }
-    },
-    [deleteTask]
+  const selectedTask = useMemo(
+    () => (selectedTaskId ? project.tasks.find((t) => t.id === selectedTaskId) : undefined),
+    [project.tasks, selectedTaskId]
   )
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (!selectedTask) return
+    if (!confirm(ru.drawer.deleteTaskConfirm(selectedTask.name))) return
+    setError(null)
+    try {
+      await deleteTask.mutateAsync(selectedTask.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : ru.saveBar.failed)
+    }
+  }, [deleteTask, selectedTask])
 
   const openTaskDrawer = useCallback(
     (taskId: number, e: React.MouseEvent) => {
@@ -416,28 +416,6 @@ export function TableView({ project }: Props) {
           )
         },
       }),
-      columnHelper.display({
-        id: 'actions',
-        header: '',
-        cell: ({ row }) => {
-          const task = row.original
-          const isDeleting = deletingTaskId === task.id
-          return (
-            <button
-              type="button"
-              className="btn-danger btn-table-delete"
-              title={ru.table.deleteTask}
-              disabled={isDeleting || deleteTask.isPending}
-              onClick={(e) => {
-                e.stopPropagation()
-                void handleDeleteTask(task)
-              }}
-            >
-              {isDeleting ? '…' : '✕'}
-            </button>
-          )
-        },
-      }),
     ],
     [
       project.categories,
@@ -446,9 +424,6 @@ export function TableView({ project }: Props) {
       taskChanges,
       baseTasksById,
       showIndicative,
-      deletingTaskId,
-      deleteTask.isPending,
-      handleDeleteTask,
     ]
   )
 
@@ -489,7 +464,21 @@ export function TableView({ project }: Props) {
     <div className="table-view">
       {error && <div className="error-banner">{error}</div>}
       <div className="table-actions">
-        <button onClick={addRow}>{ru.table.addTask}</button>
+        <button type="button" onClick={addRow}>
+          {ru.table.addTask}
+        </button>
+        <button
+          type="button"
+          className="btn-danger"
+          disabled={!selectedTask || deleteTask.isPending}
+          title={selectedTask ? ru.table.deleteTask : ru.table.selectRowToDelete}
+          onClick={() => void handleDeleteSelected()}
+        >
+          {deleteTask.isPending ? ru.table.deletingTask : ru.table.deleteTask}
+        </button>
+        {selectedTask && (
+          <span className="table-selected-hint">{ru.table.selectedRow(selectedTask.name)}</span>
+        )}
         <span className="table-hint">{ru.table.hint}</span>
       </div>
       <div className="table-scroll">
@@ -549,7 +538,12 @@ export function TableView({ project }: Props) {
                 .map((row) => (
                   <tr
                     key={row!.id}
-                    className={pendingIds.has(row!.original.id) ? 'row-pending' : ''}
+                    className={[
+                      pendingIds.has(row!.original.id) ? 'row-pending' : '',
+                      selectedTaskId === row!.original.id ? 'row-selected' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                     style={
                       !isSwimlane
                         ? {
@@ -560,15 +554,7 @@ export function TableView({ project }: Props) {
                     onClick={(e) => openTaskDrawer(row!.original.id, e)}
                   >
                     {row!.getVisibleCells().map((cell) => (
-                      <td
-                        key={cell.id}
-                        className={cell.column.id === 'actions' ? 'table-actions-cell' : undefined}
-                        onClick={
-                          cell.column.id === 'actions'
-                            ? (e) => e.stopPropagation()
-                            : undefined
-                        }
-                      >
+                      <td key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}

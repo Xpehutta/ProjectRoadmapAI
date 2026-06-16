@@ -749,44 +749,30 @@ body { margin: 0; }
 .table-view table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .table-view th, .table-view td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; }
 .table-view th { background: #f8fafc; position: sticky; top: 0; }
-.table-view th:last-child,
-.table-view td.table-actions-cell {
-  position: sticky;
-  right: 0;
-  z-index: 2;
-  background: #fff;
-  box-shadow: -4px 0 8px rgba(15, 23, 42, 0.06);
-}
-.table-view th:last-child {
-  z-index: 3;
-  background: #f8fafc;
-}
-.table-view tr.row-pending td.table-actions-cell {
-  background: #fff7ed;
-}
-.btn-table-delete {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  line-height: 1;
-}
 .table-view tbody tr {
   cursor: pointer;
+}
+.table-view tbody tr.row-selected td {
+  background: #eff6ff;
+}
+.table-view tbody tr.row-selected:hover td {
+  background: #dbeafe;
 }
 .table-view tbody tr:hover td {
   background: #f8fafc;
 }
-.table-view tbody tr:hover td.table-actions-cell {
-  background: #f1f5f9;
+.table-view tbody tr.row-pending td {
+  background: #fff7ed;
 }
 .cell-input { width: 100%; border: 1px solid transparent; padding: 4px; border-radius: 4px; background: transparent; }
 .cell-input:focus { border-color: #2563eb; background: #fff; outline: none; }
 .cell-input.narrow { width: 80px; }
-.table-actions { margin-bottom: 10px; }
+.table-actions { margin-bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.table-selected-hint {
+  font-size: 0.85rem;
+  color: #1d4ed8;
+  font-weight: 500;
+}
 .table-actions button, .btn-small {
   padding: 6px 12px;
   background: #2563eb;

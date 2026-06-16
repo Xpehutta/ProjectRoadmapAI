@@ -198,6 +198,8 @@ export const ru = {
     delete: 'Удалить',
     deleteTask: 'Удалить задачу',
     deletingTask: 'Удаление…',
+    selectRowToDelete: 'Выберите строку в таблице',
+    selectedRow: (name: string) => `Выбрано: ${name}`,
     plannedCost: 'План. стоимость',
     actualCost: 'Факт. стоимость',
     plannedEffort: 'План. трудозатраты',
