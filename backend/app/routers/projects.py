@@ -8,6 +8,7 @@ from app.models import Category, Dependency, Goal, Milestone, Project, ProjectCo
 from app.schemas import CategoryOut, DependencyOut, GoalOut, MilestoneOut, ProjectCreate, ProjectDetail, ProjectOut, ReleaseOut
 from app.services.components import component_to_out, load_component
 from app.services.project_import import import_project_from_upload
+from app.services.table_schema import default_table_schema
 from app.services.tasks import load_task, task_to_out
 from sqlalchemy.orm import joinedload
 from app.models import Dependency as DepModel
@@ -22,7 +23,11 @@ def list_projects(db: Session = Depends(get_db)):
 
 @router.post("", response_model=ProjectOut, status_code=201)
 def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
-    project = Project(name=payload.name, description=payload.description)
+    project = Project(
+        name=payload.name,
+        description=payload.description,
+        table_schema=default_table_schema("generic"),
+    )
     db.add(project)
     db.commit()
     db.refresh(project)

@@ -11,6 +11,7 @@ from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from app.models import Category, ComponentSubStage, Project, ProjectComponent, Task, TaskStatus, TaskSubStage
+from app.services.table_schema import default_table_schema
 
 RU_MONTHS = {
     "янв": 1,
@@ -419,6 +420,7 @@ def import_parsed_rows(
     project = Project(
         name=project_name,
         description=project_description,
+        table_schema=default_table_schema("datamarts"),
         created_at=datetime.utcnow(),
     )
     db.add(project)

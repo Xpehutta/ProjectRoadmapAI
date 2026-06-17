@@ -11,6 +11,7 @@ import { useEffectiveTasks, usePendingTaskIds } from '../hooks/useEffectiveTasks
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useUIStore } from '../stores/uiStore'
 import type { ProjectDetail, Release, Task } from '../types'
+import { ScheduleBar } from './ScheduleBar'
 import { applyPendingToTask } from '../utils/taskPending'
 import { formatScore, prioritizationScore } from '../utils/scoring'
 import { ru } from '../locale/ru'
@@ -26,12 +27,14 @@ function ReleaseCard({
   releaseColor,
   pending,
   scoreLabel,
+  showIndicative,
   onSelect,
 }: {
   task: Task
   releaseColor: string
   pending: boolean
   scoreLabel: string
+  showIndicative: boolean
   onSelect: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -56,6 +59,12 @@ function ReleaseCard({
           <span className="score-badge has-score">{scoreLabel}</span>
           <span>{task.completion_pct}%</span>
         </div>
+        <ScheduleBar
+          task={task}
+          color={releaseColor}
+          showIndicative={showIndicative}
+          className="release-schedule-bar"
+        />
       </div>
     </div>
   )
@@ -67,6 +76,7 @@ function ReleaseColumn({
   tasks,
   pendingIds,
   scoreLabel,
+  showIndicative,
   onSelect,
 }: {
   columnId: string
@@ -74,6 +84,7 @@ function ReleaseColumn({
   tasks: Task[]
   pendingIds: Set<number>
   scoreLabel: (t: Task) => string
+  showIndicative: boolean
   onSelect: (id: number) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnId })
@@ -101,6 +112,7 @@ function ReleaseColumn({
             releaseColor={color}
             pending={pendingIds.has(task.id)}
             scoreLabel={scoreLabel(task)}
+            showIndicative={showIndicative}
             onSelect={() => onSelect(task.id)}
           />
         ))}
@@ -110,6 +122,7 @@ function ReleaseColumn({
 }
 
 export function ReleaseBoardView({ project }: Props) {
+  const showIndicative = useUIStore((s) => s.showIndicative)
   const setSelectedTaskId = useUIStore((s) => s.setSelectedTaskId)
   const method = useUIStore((s) => s.prioritizationMethod)
   const stageTaskChange = usePendingChangesStore((s) => s.stageTaskChange)
@@ -164,6 +177,7 @@ export function ReleaseBoardView({ project }: Props) {
             tasks={columns.unassigned}
             pendingIds={pendingIds}
             scoreLabel={columns.scoreLabel}
+            showIndicative={showIndicative}
             onSelect={setSelectedTaskId}
           />
           {project.releases.map((release) => (
@@ -174,6 +188,7 @@ export function ReleaseBoardView({ project }: Props) {
               tasks={columns.byRelease.get(release.id) ?? []}
               pendingIds={pendingIds}
               scoreLabel={columns.scoreLabel}
+              showIndicative={showIndicative}
               onSelect={setSelectedTaskId}
             />
           ))}

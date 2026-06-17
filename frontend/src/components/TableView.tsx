@@ -25,8 +25,8 @@ import {
   STATUS_LABELS,
   type TableColumnDef,
 } from '../utils/tableColumns'
-import { applyPendingToTask } from '../utils/taskPending'
 import { ru, STATUS_OPTIONS } from '../locale/ru'
+import { TableColumnManager } from './TableColumnManager'
 
 const STATUSES = STATUS_OPTIONS.map((s) => s.id)
 
@@ -52,6 +52,7 @@ function TableDateCell({
         key={`${baseTask.id}-${value}-${indicativeHint ?? ''}`}
         defaultValue={value ?? ''}
         onBlur={(e) => onBlur(e.target.value || null)}
+        onChange={(e) => onBlur(e.target.value || null)}
       />
       {indicativeHint && !value && (
         <span className="table-date-hint" title={ru.table.indicativeHint}>
@@ -88,6 +89,7 @@ export function TableView({ project }: Props) {
   const effectiveTasks = useEffectiveTasks(project.tasks)
   const pendingIds = usePendingTaskIds(project.tasks)
   const [error, setError] = useState<string | null>(null)
+  const [showColumnManager, setShowColumnManager] = useState(false)
 
   const baseTasksById = useMemo(() => new Map(project.tasks.map((t) => [t.id, t])), [project.tasks])
   const tableColumns = useMemo(
@@ -125,7 +127,6 @@ export function TableView({ project }: Props) {
       setError(null)
       const base = baseTasksById.get(task.id) ?? task
       const pending = taskChanges[task.id]?.patch
-
       if (col.source === 'custom') {
         const mergedCustom = {
           ...(base.custom_fields ?? {}),
@@ -148,9 +149,9 @@ export function TableView({ project }: Props) {
 
   const renderCell = useCallback(
     (task: Task, col: TableColumnDef) => {
-      const pending = taskChanges[task.id]?.patch
-      const effective = applyPendingToTask(task, pending)
+      const effective = task
       const base = baseTasksById.get(task.id) ?? task
+      const pending = taskChanges[task.id]?.patch
       const value = getTaskCellValue(effective, col)
 
       if (col.key === 'data_source' && col.source === 'builtin') {
@@ -175,7 +176,7 @@ export function TableView({ project }: Props) {
           <select
             key={`st-${task.id}-${value}`}
             defaultValue={String(value ?? 'todo')}
-            onChange={(e) => stageColumn(task, col, e.target.value)}
+            onChange={(e) => stageColumn(base, col, e.target.value)}
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -192,7 +193,7 @@ export function TableView({ project }: Props) {
             key={`cat-${task.id}-${value}`}
             defaultValue={effective.category_id ?? ''}
             onChange={(e) =>
-              stageColumn(task, col, e.target.value ? Number(e.target.value) : null)
+              stageColumn(base, col, e.target.value ? Number(e.target.value) : null)
             }
           >
             <option value="">—</option>
@@ -215,7 +216,7 @@ export function TableView({ project }: Props) {
             value={(value as string | null) ?? null}
             showShift={showShift}
             indicativeHint={indicativeHint}
-            onBlur={(v) => stageColumn(task, col, v)}
+        onBlur={(v) => stageColumn(base, col, v)}
           />
         )
       }
@@ -229,7 +230,7 @@ export function TableView({ project }: Props) {
             defaultValue={value == null || value === '' ? '' : String(value)}
             onBlur={(e) =>
               stageColumn(
-                task,
+                base,
                 col,
                 e.target.value ? Number(e.target.value) : null
               )
@@ -255,7 +256,7 @@ export function TableView({ project }: Props) {
             key={`pred-${task.id}-${refs}`}
             defaultValue={refs}
             placeholder={ru.table.predecessorsPlaceholder}
-            onBlur={(e) => stageColumn(task, col, e.target.value)}
+            onBlur={(e) => stageColumn(base, col, e.target.value)}
           />
         )
       }
@@ -267,7 +268,7 @@ export function TableView({ project }: Props) {
             key={`name-${task.id}-${value}`}
             defaultValue={String(value ?? '')}
             onBlur={(e) => {
-              if (e.target.value !== value) stageColumn(task, col, e.target.value)
+              if (e.target.value !== value) stageColumn(base, col, e.target.value)
             }}
           />
         )
@@ -280,14 +281,14 @@ export function TableView({ project }: Props) {
           key={`${col.key}-${task.id}-${value}`}
           defaultValue={String(value ?? '')}
           rows={2}
-          onBlur={(e) => stageColumn(task, col, e.target.value || null)}
+          onBlur={(e) => stageColumn(base, col, e.target.value || null)}
         />
       ) : (
         <input
           className="cell-input"
           key={`${col.key}-${task.id}-${value}`}
           defaultValue={String(value ?? '')}
-          onBlur={(e) => stageColumn(task, col, e.target.value || null)}
+          onBlur={(e) => stageColumn(base, col, e.target.value || null)}
         />
       )
     },
@@ -338,24 +339,33 @@ export function TableView({ project }: Props) {
   const columnCount = table.getAllColumns().length
 
   const addRow = async () => {
-    const today = new Date().toISOString().slice(0, 10)
-    await createTask.mutateAsync({
-      name: ru.table.newTask,
-      start_date: today,
-      end_date: today,
-      status: 'todo',
-      category_id: project.categories[0]?.id ?? null,
-    })
+    setError(null)
+    try {
+      const task = await createTask.mutateAsync({
+        name: ru.table.newTask,
+        status: 'todo',
+        category_id: project.categories[0]?.id ?? null,
+      })
+      setSelectedTaskId(task.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : ru.saveBar.failed)
+    }
   }
 
   const isAdaptive = !project.table_schema?.length
 
   return (
     <div className="table-view">
+      {showColumnManager && (
+        <TableColumnManager project={project} onClose={() => setShowColumnManager(false)} />
+      )}
       {error && <div className="error-banner">{error}</div>}
       <div className="table-actions">
         <button type="button" onClick={addRow}>
           {ru.table.addTask}
+        </button>
+        <button type="button" onClick={() => setShowColumnManager(true)}>
+          {ru.table.manageColumns}
         </button>
         <button
           type="button"

@@ -14,6 +14,7 @@ import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useUIStore } from '../stores/uiStore'
 import type { ProjectDetail, Task, TaskStatus } from '../types'
 import { formatTaskSchedule, isIndicativeSchedule } from '../utils/taskDisplay'
+import { ScheduleBar } from './ScheduleBar'
 import { applyPendingToTask } from '../utils/taskPending'
 import { ru, STATUS_OPTIONS } from '../locale/ru'
 
@@ -79,11 +80,12 @@ function DraggableCard({
             </div>
           )
         })()}
-        {showIndicative && task.indicative_start && task.end_date && (
-          <div className="kanban-indicative">
-            ~ {task.indicative_start} – {task.indicative_end}
-          </div>
-        )}
+        <ScheduleBar
+          task={task}
+          color={color}
+          showIndicative={showIndicative}
+          className="kanban-schedule-bar"
+        />
         <div className="progress-bar small">
           <div
             className="progress-fill"

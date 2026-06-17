@@ -5,7 +5,7 @@ from app.database import get_db
 from app.models import ComponentSubStage, Task, TaskSubStage
 from app.schemas import SubStageCreate, SubStageOut, SubStageUpdate
 from app.services.completion import complete_all_sub_stages, recompute_completion
-from app.services.component_merge import component_stage_to_out, effective_sub_stages
+from app.services.component_merge import bump_linked_task_versions, component_stage_to_out, effective_sub_stages
 from app.services.tasks import load_task
 
 router = APIRouter(prefix="/tasks/{task_id}/sub-stages", tags=["sub-stages"])
@@ -33,8 +33,7 @@ def create_sub_stage(task_id: int, payload: SubStageCreate, db: Session = Depend
         db.add(stage)
         db.flush()
         recompute_completion(db, task)
-        task.component.version += 1
-        task.version += 1
+        bump_linked_task_versions(task)
         db.commit()
         db.refresh(stage)
         return component_stage_to_out(stage)
@@ -51,7 +50,7 @@ def create_sub_stage(task_id: int, payload: SubStageCreate, db: Session = Depend
     db.add(stage)
     db.flush()
     recompute_completion(db, task)
-    task.version += 1
+    bump_linked_task_versions(task)
     db.commit()
     db.refresh(stage)
     return stage
@@ -78,8 +77,7 @@ def update_sub_stage(
         for k, v in payload.model_dump(exclude_unset=True).items():
             setattr(stage, k, v)
         recompute_completion(db, task)
-        task.component.version += 1
-        task.version += 1
+        bump_linked_task_versions(task)
         db.commit()
         db.refresh(stage)
         return SubStageOut(
@@ -102,7 +100,7 @@ def update_sub_stage(
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(stage, k, v)
     recompute_completion(db, task)
-    task.version += 1
+    bump_linked_task_versions(task)
     db.commit()
     db.refresh(stage)
     return stage
@@ -114,6 +112,7 @@ def complete_all(task_id: int, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(404, "Task not found")
     complete_all_sub_stages(db, task)
-    task.version += 1
+    if not (task.component_id and task.component):
+        bump_linked_task_versions(task)
     db.commit()
     return effective_sub_stages(task)

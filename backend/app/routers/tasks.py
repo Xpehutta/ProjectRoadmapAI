@@ -97,11 +97,14 @@ def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)
         changes["duration_days"] = (changes["end_date"] - ref.start_date).days + 1
 
     component_changes, task_changes = split_task_changes(changes)
-    if component_changes and task.component:
-        apply_field_changes(db, task.component, component_changes, audit_task=task)
-        task.component.version += 1
-    if task_changes:
-        apply_field_changes(db, task, task_changes)
+    if task.component_id and task.component:
+        if component_changes:
+            apply_field_changes(db, task.component, component_changes, audit_task=task)
+            task.component.version += 1
+        if task_changes:
+            apply_field_changes(db, task, task_changes)
+    else:
+        apply_field_changes(db, task, changes)
     task.version += 1
 
     affected: list[Task] = []
@@ -132,6 +135,15 @@ def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)
     db.commit()
     refreshed = load_task(db, task.id)
     affected_out = [task_to_out(load_task(db, t.id) or t) for t in affected]
+    if component_changes and task.component_id and task.component:
+        seen = {task.id, *(a.id for a in affected)}
+        for usage in task.component.tasks or []:
+            if usage.id in seen:
+                continue
+            loaded = load_task(db, usage.id)
+            if loaded:
+                affected_out.append(task_to_out(loaded))
+                seen.add(usage.id)
     return TaskPatchResponse(task=task_to_out(refreshed), affected_tasks=affected_out)
 
 

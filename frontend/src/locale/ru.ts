@@ -212,7 +212,7 @@ export const ru = {
     deletingTask: 'Удаление…',
     selectRowToDelete: 'Выберите строку в таблице',
     selectedRow: (name: string) => `Выбрано: ${name}`,
-    adaptiveHint: 'Столбцы подстраиваются под данные проекта',
+    adaptiveHint: 'Столбцы по умолчанию всегда видны; остальные появляются при заполнении данных',
     plannedCost: 'План. стоимость',
     actualCost: 'Факт. стоимость',
     plannedEffort: 'План. трудозатраты',
@@ -220,6 +220,27 @@ export const ru = {
     groupActual: 'Факт',
     groupIndicative: 'Индикатив',
     newTask: 'Новая задача',
+    manageColumns: 'Столбцы',
+  },
+
+  tableColumns: {
+    title: 'Столбцы таблицы',
+    description:
+      'Добавляйте дополнительные столбцы или скрывайте ненужные. Стандартные столбцы можно вернуть из списка. Удаление дополнительного столбца удаляет его данные у всех задач.',
+    loading: 'Загрузка…',
+    customBadge: 'дополнительный',
+    builtinBadge: 'стандартный',
+    delete: 'Удалить',
+    requiredColumn: 'Обязательный столбец',
+    newPlaceholder: 'Название нового столбца',
+    addCustom: 'Добавить столбец',
+    addBuiltin: 'Добавить стандартный',
+    addBuiltinPlaceholder: 'Выберите стандартный столбец…',
+    adding: 'Добавление…',
+    close: 'Закрыть',
+    deleteCustomConfirm: (label: string) =>
+      `Удалить столбец «${label}» и все его значения во всех задачах?`,
+    deleteBuiltinConfirm: (label: string) => `Скрыть столбец «${label}» из таблицы?`,
   },
 
   kanban: {

@@ -794,6 +794,36 @@ body { margin: 0; }
   overflow: hidden;
 }
 .progress-bar.small { height: 4px; margin-top: 6px; }
+
+.schedule-bar {
+  position: relative;
+  width: 100%;
+  margin-top: 6px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: visible;
+}
+.schedule-bar-indicative {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1.5px dashed;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.schedule-bar-actual {
+  position: absolute;
+  top: 20%;
+  height: 60%;
+  border-radius: 2px;
+  min-width: 3px;
+  pointer-events: none;
+}
+.timeline-schedule-bar { margin-top: 8px; }
+.kanban-schedule-bar { margin-top: 4px; }
+.release-schedule-bar { margin-top: 6px; }
+.gantt-bar-indicative { pointer-events: none; }
 .progress-fill { height: 100%; border-radius: 3px; background: #2563eb; }
 
 .kanban-board {
@@ -1126,6 +1156,15 @@ body { margin: 0; }
 .category-list li { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
 .category-list input[type="text"] { flex: 1; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
 .category-form { display: flex; gap: 8px; margin: 16px 0; }
+
+.column-list { list-style: none; padding: 0; max-height: 320px; overflow-y: auto; }
+.column-list li { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.column-list-label { flex: 1; min-width: 0; }
+.column-form { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+.column-form input,
+.column-form select { flex: 1; min-width: 160px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.badge-custom { background: #e0e7ff; color: #3730a3; }
+.badge-builtin { background: #f1f5f9; color: #475569; }
 
 .completion-display { margin-top: 12px; font-size: 0.85rem; }
 

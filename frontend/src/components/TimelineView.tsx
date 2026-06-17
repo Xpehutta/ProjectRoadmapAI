@@ -7,6 +7,7 @@ import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useUIStore } from '../stores/uiStore'
 import type { ProjectDetail, Task } from '../types'
 import { formatTaskSchedule, isIndicativeSchedule } from '../utils/taskDisplay'
+import { ScheduleBar } from './ScheduleBar'
 import { buildTaskGroups, formatGroupDateRange, getGroupDateRangesFromTasks } from '../utils/taskGroups'
 import { ru } from '../locale/ru'
 
@@ -47,7 +48,7 @@ function TimelineItem({
           className="timeline-date-input"
           key={`ts-${task.id}-${task.start_date}`}
           defaultValue={task.start_date ?? ''}
-          onBlur={(e) => onUpdateDate(task, 'start_date', e.target.value)}
+          onBlur={(e) => onUpdateDate(baseTask, 'start_date', e.target.value)}
         />
         <span>→</span>
         <input
@@ -55,7 +56,7 @@ function TimelineItem({
           className="timeline-date-input"
           key={`te-${task.id}-${task.end_date}`}
           defaultValue={task.end_date ?? ''}
-          onBlur={(e) => onUpdateDate(task, 'end_date', e.target.value)}
+          onBlur={(e) => onUpdateDate(baseTask, 'end_date', e.target.value)}
         />
         <DateShiftIndicator
           shifts={dateShifts}
@@ -81,9 +82,9 @@ function TimelineItem({
           </span>
           <span className="pct">{task.completion_pct}%</span>
         </div>
-        {showIndicative && task.indicative_start && (
+        {showIndicative && (task.indicative_start || task.indicative_end) && (
           <div className="indicative-sub">
-            {ru.timeline.indicative}: {task.indicative_start} → {task.indicative_end}
+            {ru.timeline.indicative}: {task.indicative_start ?? '…'} → {task.indicative_end ?? '…'}
           </div>
         )}
         <div className="progress-bar">
@@ -93,6 +94,12 @@ function TimelineItem({
           />
         </div>
         {task.assignee && <div className="assignee">{task.assignee}</div>}
+        <ScheduleBar
+          task={task}
+          color={borderColor}
+          showIndicative={showIndicative}
+          className="timeline-schedule-bar"
+        />
       </div>
     </div>
   )

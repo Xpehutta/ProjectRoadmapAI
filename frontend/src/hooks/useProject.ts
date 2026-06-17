@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useSavedDateShiftsStore } from '../stores/savedDateShiftsStore'
 import { useUIStore } from '../stores/uiStore'
-import type { ProjectDetail } from '../types'
+import type { ProjectDetail, Task } from '../types'
 
 const PROJECT_ID_KEY = 'roadmap-selected-project-id'
 
@@ -86,7 +86,15 @@ export function useCreateTask(projectId: number) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: Record<string, unknown>) => api.createTask(projectId, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
+    onSuccess: (task: Task) => {
+      qc.setQueryData<ProjectDetail>(['project', projectId], (old) => {
+        if (!old) return old
+        if (old.tasks.some((t) => t.id === task.id)) return old
+        return { ...old, tasks: [...old.tasks, task] }
+      })
+      void qc.invalidateQueries({ queryKey: ['project', projectId] })
+      void qc.invalidateQueries({ queryKey: ['projects'] })
+    },
   })
 }
 

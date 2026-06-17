@@ -1,10 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import { api } from '../api/client'
+import { api, ConflictError } from '../api/client'
 import { ShiftCommentCollapsible } from './ShiftCommentCollapsible'
 import { pluralUnsavedChanges, ru } from '../locale/ru'
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useSavedDateShiftsStore } from '../stores/savedDateShiftsStore'
+import type { ProjectDetail, Task } from '../types'
 import { getTaskDateShiftFromPendingChange } from '../utils/dateShift'
 
 interface Props {
@@ -17,6 +18,7 @@ export function SaveChangesBar({ projectId }: Props) {
   const setTaskShiftComment = usePendingChangesStore((s) => s.setTaskShiftComment)
   const setMilestoneShiftComment = usePendingChangesStore((s) => s.setMilestoneShiftComment)
   const clearAll = usePendingChangesStore((s) => s.clearAll)
+  const syncVersions = usePendingChangesStore((s) => s.syncVersionsFromTasks)
   const recordTaskFromPending = useSavedDateShiftsStore((s) => s.recordTaskFromPending)
   const recordMilestoneFromPending = useSavedDateShiftsStore((s) => s.recordMilestoneFromPending)
   const qc = useQueryClient()
@@ -34,6 +36,34 @@ export function SaveChangesBar({ projectId }: Props) {
 
   if (total === 0) return null
 
+  const applyTaskUpdateToCache = (updated: { task: Task; affected_tasks: Task[] }) => {
+    qc.setQueryData<ProjectDetail>(['project', projectId], (old) => {
+      if (!old) return old
+      const tasks = old.tasks.map((task) => {
+        if (task.id === updated.task.id) return updated.task
+        const affected = updated.affected_tasks.find((a) => a.id === task.id)
+        return affected ?? task
+      })
+      return { ...old, tasks }
+    })
+    syncVersions([updated.task, ...updated.affected_tasks])
+  }
+
+  const updateTaskWithRetry = async (
+    taskId: number,
+    body: Record<string, unknown>
+  ) => {
+    try {
+      return await api.updateTask(taskId, body)
+    } catch (e) {
+      if (e instanceof ConflictError && e.current) {
+        const current = e.current as Task
+        return await api.updateTask(taskId, { ...body, version: current.version })
+      }
+      throw e
+    }
+  }
+
   const persist = async (recordShifts: boolean) => {
     setSaving(true)
     setError(null)
@@ -49,7 +79,8 @@ export function SaveChangesBar({ projectId }: Props) {
             .map((s) => s.trim())
             .filter(Boolean)
         }
-        await api.updateTask(t.taskId, body)
+        const updated = await updateTaskWithRetry(t.taskId, body)
+        applyTaskUpdateToCache(updated)
         if (recordShifts && getTaskDateShiftFromPendingChange(t) && t.shiftComment?.trim()) {
           await api.addComment(t.taskId, t.shiftComment.trim())
         }

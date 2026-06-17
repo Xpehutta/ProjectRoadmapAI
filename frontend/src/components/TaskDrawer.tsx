@@ -4,11 +4,11 @@ import { api } from '../api/client'
 import { DateShiftIndicator } from './DateShiftIndicator'
 import { PendingShiftComment } from './PendingShiftComment'
 import { useTaskDateShifts } from '../hooks/useTaskDateShift'
+import { useEffectiveTask } from '../hooks/useEffectiveTasks'
 import { useDeleteTask } from '../hooks/useProject'
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useUIStore } from '../stores/uiStore'
 import type { AuditEventType, Moscow, ProjectDetail, StageTemplate, Task } from '../types'
-import { applyPendingToTask } from '../utils/taskPending'
 import {
   CUSTOM_STAGE_VALUE,
   existingStageNameSet,
@@ -17,6 +17,7 @@ import {
 } from '../utils/stageTemplates'
 import { formatLocaleDateTime, HISTORY_FILTER_OPTIONS, ru } from '../locale/ru'
 import { formatScore, MOSCOW_OPTIONS, prioritizationScore } from '../utils/scoring'
+import { refreshProjectAfterSubStageChange } from '../utils/subStageRefresh'
 
 interface Props {
   project: ProjectDetail
@@ -68,7 +69,7 @@ export function TaskDrawer({ project, task }: Props) {
     )
   }
 
-  const effective = applyPendingToTask(task, pending?.patch)
+  const effective = useEffectiveTask(project.tasks, task.id)
   const hasPending = Boolean(pending)
   const dateShifts = useTaskDateShifts(task)
   const linkedComponent = task.component_id
@@ -117,12 +118,12 @@ export function TaskDrawer({ project, task }: Props) {
 
   const toggleStage = async (stageId: number, isDone: boolean) => {
     await api.updateSubStage(task.id, stageId, { is_done: !isDone })
-    qc.invalidateQueries({ queryKey: ['project', project.id] })
+    await refreshProjectAfterSubStageChange(qc, project.id)
   }
 
   const completeAll = async () => {
     await api.completeAllSubStages(task.id)
-    qc.invalidateQueries({ queryKey: ['project', project.id] })
+    await refreshProjectAfterSubStageChange(qc, project.id)
   }
 
   const addStage = async (e: FormEvent) => {
@@ -146,7 +147,7 @@ export function TaskDrawer({ project, task }: Props) {
       setNewStageIndicative(false)
       setSelectedTemplate('')
       setSaveTemplateForReuse(false)
-      qc.invalidateQueries({ queryKey: ['project', project.id] })
+      await refreshProjectAfterSubStageChange(qc, project.id)
     } finally {
       setAddingStage(false)
     }

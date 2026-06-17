@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.models import ComponentSubStage, Task, TaskStatus, TaskSubStage
 from app.services.audit import log_change
 from app.models import AuditEventType
+from app.services.component_merge import bump_linked_task_versions
 from app.services.components import recompute_component_completion
 
 
@@ -36,8 +37,7 @@ def complete_all_sub_stages(db: Session, task: Task) -> None:
                 stage.is_done = True
         task.component.completion_pct = 100
         task.component.status = TaskStatus.done
-        task.component.version += 1
-        task.version += 1
+        bump_linked_task_versions(task)
         return
     stages = db.query(TaskSubStage).filter(TaskSubStage.task_id == task.id).all()
     for stage in stages:

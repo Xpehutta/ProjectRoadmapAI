@@ -46,7 +46,41 @@ export const BUILTIN_COLUMN_ORDER: { key: keyof Task | 'predecessors'; label: st
   { key: 'predecessors', label: ru.table.predecessors, type: 'text' },
 ]
 
-const CORE_KEYS = new Set(['status', 'name'])
+/** Always visible in adaptive mode (generic projects). */
+export const PINNED_KEYS_GENERIC = new Set([
+  'status',
+  'name',
+  'assignee',
+  'start_date',
+  'end_date',
+  'indicative_start',
+  'indicative_end',
+  'completion_pct',
+])
+
+/** Always visible in adaptive mode (DataMarts-style projects). */
+export const PINNED_KEYS_DATAMARTS = new Set([
+  'status',
+  'category_id',
+  'name',
+  'data_source',
+  'subproduct',
+  'assignee',
+  'start_date',
+  'end_date',
+  'indicative_start',
+  'indicative_end',
+  'completion_pct',
+])
+
+export function isDatamartsProject(project: ProjectDetail, tasks: Task[]): boolean {
+  if (project.name.toLowerCase().includes('витрин')) return true
+  return tasks.some((t) => Boolean(t.data_source || t.component_id || t.subproduct))
+}
+
+function pinnedKeysForProject(project: ProjectDetail, tasks: Task[]): Set<string> {
+  return isDatamartsProject(project, tasks) ? PINNED_KEYS_DATAMARTS : PINNED_KEYS_GENERIC
+}
 
 function isEmptyValue(value: unknown): boolean {
   return value === null || value === undefined || value === ''
@@ -88,8 +122,9 @@ export function resolveTableColumns(project: ProjectDetail, tasks: Task[]): Tabl
   }
 
   const columns: TableColumnDef[] = []
+  const pinned = pinnedKeysForProject(project, tasks)
   for (const def of BUILTIN_COLUMN_ORDER) {
-    if (CORE_KEYS.has(def.key) || tasks.some((t) => taskHasBuiltinValue(t, def.key))) {
+    if (pinned.has(def.key) || tasks.some((t) => taskHasBuiltinValue(t, def.key))) {
       columns.push({ key: def.key, label: def.label, type: def.type, source: 'builtin' })
     }
   }

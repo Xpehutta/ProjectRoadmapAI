@@ -28,6 +28,13 @@ import {
   shiftArrowLineCoords,
 } from '../utils/dateShift'
 
+function indicativeBarDates(start: Date | null, end: Date | null): { start: Date; end: Date } | null {
+  if (start && end) return { start, end }
+  if (start) return { start, end: start }
+  if (end) return { start: end, end }
+  return null
+}
+
 const ROW_H = 44
 const LABEL_W = 220
 const HEADER_H = 48
@@ -927,6 +934,8 @@ export function GanttView({ project }: Props) {
           const pColor = priorityColor(effective.priority)
           const labelX = ganttShowPriority ? 34 : 8
 
+          const indRange = showIndicative ? indicativeBarDates(indStart, indEnd) : null
+
           return (
             <g key={task.id}>
               <rect x={0} y={y} width={LABEL_W + chartW} height={ROW_H} fill={i % 2 ? '#fff' : '#fafafa'} />
@@ -956,17 +965,18 @@ export function GanttView({ project }: Props) {
                 {effective.name}
                 {pending ? ' *' : ''}
               </text>
-              {showIndicative && indStart && indEnd && (
+              {indRange && (
                 <rect
-                  x={xForDate(indStart)}
+                  x={xForDate(indRange.start)}
                   y={y + 10}
-                  width={Math.max(daysBetween(indStart, indEnd) * dayWidth, 4)}
+                  width={Math.max(daysBetween(indRange.start, indRange.end) * dayWidth, 4)}
                   height={24}
                   fill={catColor + '22'}
                   stroke={catColor}
                   strokeDasharray="4 3"
                   strokeWidth={1.5}
                   rx={4}
+                  className="gantt-bar-indicative"
                 />
               )}
               {start && end && (

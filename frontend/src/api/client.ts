@@ -11,6 +11,8 @@ import type {
   SubStage,
   StageTemplate,
   StageTemplateLibrary,
+  TableColumnLibrary,
+  TableColumnSchema,
   Task,
   TaskPatchResponse,
 } from '../types'
@@ -184,5 +186,19 @@ export const api = {
     request<StageTemplate>(`/api/projects/${projectId}/stage-templates`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  getTableColumns: (projectId: number) =>
+    request<TableColumnLibrary>(`/api/projects/${projectId}/table-columns`),
+  addTableColumn: (
+    projectId: number,
+    body: { label?: string; builtin_key?: string }
+  ) =>
+    request<TableColumnSchema>(`/api/projects/${projectId}/table-columns`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  deleteTableColumn: (projectId: number, columnKey: string) =>
+    request<void>(`/api/projects/${projectId}/table-columns/${encodeURIComponent(columnKey)}`, {
+      method: 'DELETE',
     }),
 }

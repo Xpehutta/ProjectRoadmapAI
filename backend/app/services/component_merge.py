@@ -75,6 +75,16 @@ def merge_task_fields(task: Task) -> dict:
     return data
 
 
+def bump_linked_task_versions(task: Task) -> None:
+    """Increment task versions after immediate writes (sub-stages, etc.)."""
+    if task.component_id and task.component:
+        task.component.version += 1
+        for usage in task.component.tasks or []:
+            usage.version += 1
+        return
+    task.version += 1
+
+
 def copy_component_to_task(task: Task, component: ProjectComponent) -> None:
     for field in SHARED_TASK_FIELDS:
         setattr(task, field, getattr(component, field))

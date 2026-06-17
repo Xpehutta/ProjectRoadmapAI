@@ -18,6 +18,19 @@ export function useEffectiveTasks(tasks: Task[]): Task[] {
   }, [tasks, taskChanges])
 }
 
+export function useEffectiveTask(tasks: Task[], taskId: number): Task {
+  const effectiveTasks = useEffectiveTasks(tasks)
+  return useMemo(() => {
+    return (
+      effectiveTasks.find((t) => t.id === taskId) ??
+      tasks.find((t) => t.id === taskId) ?? {
+        id: taskId,
+        name: '',
+      } as Task
+    )
+  }, [effectiveTasks, tasks, taskId])
+}
+
 export function useEffectiveStatus(task: Task): TaskStatus {
   const patch = usePendingChangesStore((s) => s.taskChanges[task.id]?.patch)
   return (patch?.status as TaskStatus) ?? task.status

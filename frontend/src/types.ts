@@ -161,6 +161,11 @@ export interface TableColumnSchema {
   source: 'builtin' | 'custom'
 }
 
+export interface TableColumnLibrary {
+  columns: TableColumnSchema[]
+  hidden_builtin: TableColumnSchema[]
+}
+
 export interface StageTemplate {
   name: string
   group: string | null

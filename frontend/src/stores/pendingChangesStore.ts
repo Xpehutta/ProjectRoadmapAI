@@ -35,6 +35,7 @@ interface PendingChangesState {
   hasTaskPending: (taskId: number) => boolean
   clearAll: () => void
   clearTask: (taskId: number) => void
+  syncVersionsFromTasks: (tasks: Task[]) => void
   hasPending: () => boolean
   count: () => number
 }
@@ -125,6 +126,20 @@ export const usePendingChangesStore = create<PendingChangesState>((set, get) => 
       const next = { ...s.taskChanges }
       delete next[taskId]
       return { taskChanges: next }
+    }),
+
+  syncVersionsFromTasks: (tasks) =>
+    set((s) => {
+      const next = { ...s.taskChanges }
+      let changed = false
+      for (const change of Object.values(next)) {
+        const fresh = tasks.find((t) => t.id === change.taskId)
+        if (fresh && fresh.version !== change.version) {
+          next[change.taskId] = { ...change, version: fresh.version }
+          changed = true
+        }
+      }
+      return changed ? { taskChanges: next } : s
     }),
 
   hasPending: () => {
