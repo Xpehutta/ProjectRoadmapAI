@@ -110,6 +110,7 @@ class TaskBase(BaseModel):
     risks: str | None = None
     notes: str | None = None
     extra_info: str | None = None
+    custom_fields: dict | None = None
 
 
 class TaskCreate(TaskBase):
@@ -153,6 +154,7 @@ class TaskUpdate(BaseModel):
     risks: str | None = None
     notes: str | None = None
     extra_info: str | None = None
+    custom_fields: dict | None = None
     predecessor_refs: list[str] | None = None
 
 
@@ -335,6 +337,8 @@ class AuditEventOut(BaseModel):
 class ProjectBase(BaseModel):
     name: str
     description: str | None = None
+    table_schema: list[dict] | None = None
+    stage_templates: list[dict] | None = None
 
 
 class ProjectCreate(ProjectBase):

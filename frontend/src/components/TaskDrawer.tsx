@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { api } from '../api/client'
 import { DateShiftIndicator } from './DateShiftIndicator'
 import { PendingShiftComment } from './PendingShiftComment'
@@ -7,8 +7,14 @@ import { useTaskDateShifts } from '../hooks/useTaskDateShift'
 import { useDeleteTask } from '../hooks/useProject'
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useUIStore } from '../stores/uiStore'
-import type { AuditEventType, Moscow, ProjectDetail, Task } from '../types'
+import type { AuditEventType, Moscow, ProjectDetail, StageTemplate, Task } from '../types'
 import { applyPendingToTask } from '../utils/taskPending'
+import {
+  CUSTOM_STAGE_VALUE,
+  existingStageNameSet,
+  groupStageTemplates,
+  stageNameTaken,
+} from '../utils/stageTemplates'
 import { formatLocaleDateTime, HISTORY_FILTER_OPTIONS, ru } from '../locale/ru'
 import { formatScore, MOSCOW_OPTIONS, prioritizationScore } from '../utils/scoring'
 
@@ -29,6 +35,38 @@ export function TaskDrawer({ project, task }: Props) {
   const [newStageDueDate, setNewStageDueDate] = useState('')
   const [newStageIndicative, setNewStageIndicative] = useState(false)
   const [addingStage, setAddingStage] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState('')
+  const [saveTemplateForReuse, setSaveTemplateForReuse] = useState(false)
+
+  const { data: stageLibrary } = useQuery({
+    queryKey: ['stage-templates', project.id],
+    queryFn: () => api.getStageTemplates(project.id),
+  })
+
+  const existingStageNames = useMemo(
+    () => existingStageNameSet(task.sub_stages.map((s) => s.name)),
+    [task.sub_stages]
+  )
+
+  const renderTemplateOptions = (templates: StageTemplate[] | undefined, sectionLabel: string) => {
+    if (!templates?.length) return null
+    const grouped = groupStageTemplates(templates)
+    return (
+      <optgroup label={sectionLabel}>
+        {Array.from(grouped.entries()).flatMap(([group, items]) =>
+          items.map((item) => {
+            const taken = stageNameTaken(existingStageNames, item.full_label)
+            return (
+              <option key={`${sectionLabel}-${item.full_label}`} value={item.full_label} disabled={taken}>
+                {group !== '—' ? `${group} → ${item.name}` : item.full_label}
+                {taken ? ` (${ru.drawer.templateAlreadyOnTask})` : ''}
+              </option>
+            )
+          })
+        )}
+      </optgroup>
+    )
+  }
 
   const effective = applyPendingToTask(task, pending?.patch)
   const hasPending = Boolean(pending)
@@ -99,12 +137,30 @@ export function TaskDrawer({ project, task }: Props) {
         due_date: newStageDueDate || null,
         is_indicative: newStageIndicative,
       })
+      if (saveTemplateForReuse && selectedTemplate === CUSTOM_STAGE_VALUE) {
+        await api.addStageTemplate(project.id, { name, full_label: name })
+        await qc.invalidateQueries({ queryKey: ['stage-templates', project.id] })
+      }
       setNewStageName('')
       setNewStageDueDate('')
       setNewStageIndicative(false)
+      setSelectedTemplate('')
+      setSaveTemplateForReuse(false)
       qc.invalidateQueries({ queryKey: ['project', project.id] })
     } finally {
       setAddingStage(false)
+    }
+  }
+
+  const handleTemplateSelect = (value: string) => {
+    setSelectedTemplate(value)
+    if (value === CUSTOM_STAGE_VALUE) {
+      setNewStageName('')
+      return
+    }
+    if (value) {
+      setNewStageName(value)
+      setSaveTemplateForReuse(false)
     }
   }
 
@@ -503,13 +559,38 @@ export function TaskDrawer({ project, task }: Props) {
         </ul>
         <form className="add-stage-form" onSubmit={addStage}>
           <label>
-            {ru.drawer.stageName}
-            <input
-              value={newStageName}
-              onChange={(e) => setNewStageName(e.target.value)}
-              placeholder={ru.drawer.stageNamePlaceholder}
-            />
+            {ru.drawer.pickFromTemplate}
+            <select
+              value={selectedTemplate}
+              onChange={(e) => handleTemplateSelect(e.target.value)}
+            >
+              <option value="">—</option>
+              {renderTemplateOptions(stageLibrary?.predefined, ru.drawer.templatePredefined)}
+              {renderTemplateOptions(stageLibrary?.custom, ru.drawer.templateCustom)}
+              {renderTemplateOptions(stageLibrary?.used, ru.drawer.templateUsed)}
+              <option value={CUSTOM_STAGE_VALUE}>{ru.drawer.customStageOption}</option>
+            </select>
           </label>
+          {(selectedTemplate === CUSTOM_STAGE_VALUE || !selectedTemplate) && (
+            <label>
+              {ru.drawer.stageName}
+              <input
+                value={newStageName}
+                onChange={(e) => setNewStageName(e.target.value)}
+                placeholder={ru.drawer.stageNamePlaceholder}
+              />
+            </label>
+          )}
+          {selectedTemplate === CUSTOM_STAGE_VALUE && (
+            <label className="toggle inline-toggle">
+              <input
+                type="checkbox"
+                checked={saveTemplateForReuse}
+                onChange={(e) => setSaveTemplateForReuse(e.target.checked)}
+              />
+              {ru.drawer.saveForReuse}
+            </label>
+          )}
           <label>
             {ru.drawer.stageDueDate}
             <input

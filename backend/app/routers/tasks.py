@@ -75,6 +75,10 @@ def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)
         )
 
     changes = payload.model_dump(exclude_unset=True, exclude={"version", "predecessor_refs"})
+    if "custom_fields" in changes and changes["custom_fields"] is not None:
+        merged_custom = dict(task.custom_fields or {})
+        merged_custom.update(changes["custom_fields"])
+        changes["custom_fields"] = merged_custom
     date_fields = {"start_date", "end_date", "duration_days"}
 
     ref = task.component if task.component_id and task.component else task

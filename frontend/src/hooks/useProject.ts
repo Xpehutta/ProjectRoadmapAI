@@ -44,6 +44,22 @@ export function useCreateProject() {
   })
 }
 
+export function useImportProject() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      file,
+      name,
+      description,
+    }: {
+      file: File
+      name?: string
+      description?: string
+    }) => api.importProject(file, name, description),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  })
+}
+
 export function useUpdateTask(projectId: number) {
   const qc = useQueryClient()
   return useMutation({

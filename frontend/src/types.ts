@@ -120,6 +120,7 @@ export interface Task {
   risks: string | null
   notes: string | null
   extra_info: string | null
+  custom_fields?: Record<string, string> | null
   component_id: number | null
   component_name: string | null
   component_version: number | null
@@ -149,7 +150,29 @@ export interface Project {
   id: number
   name: string
   description: string | null
+  table_schema: TableColumnSchema[] | null
   created_at: string
+}
+
+export interface TableColumnSchema {
+  key: string
+  label: string
+  type: string
+  source: 'builtin' | 'custom'
+}
+
+export interface StageTemplate {
+  name: string
+  group: string | null
+  full_label: string
+  source?: 'predefined' | 'custom' | 'used'
+}
+
+export interface StageTemplateLibrary {
+  predefined: StageTemplate[]
+  custom: StageTemplate[]
+  used: StageTemplate[]
+  all: StageTemplate[]
 }
 
 export interface ProjectDetail extends Project {

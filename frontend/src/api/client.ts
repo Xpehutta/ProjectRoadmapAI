@@ -9,6 +9,8 @@ import type {
   ProjectDetail,
   Release,
   SubStage,
+  StageTemplate,
+  StageTemplateLibrary,
   Task,
   TaskPatchResponse,
 } from '../types'
@@ -26,8 +28,10 @@ export function setUserName(name: string): void {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
+  }
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
   }
   const userName = getUserName()
   if (userName) headers['X-User-Name'] = userName
@@ -39,7 +43,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || res.statusText)
+    let message = text || res.statusText
+    try {
+      const body = JSON.parse(text) as { detail?: unknown }
+      if (typeof body.detail === 'string') message = body.detail
+    } catch {
+      /* plain-text error */
+    }
+    throw new Error(message)
   }
   if (res.status === 204) return undefined as T
   return res.json()
@@ -61,6 +72,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  importProject: (file: File, name?: string, description?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (name?.trim()) form.append('name', name.trim())
+    if (description?.trim()) form.append('description', description.trim())
+    return request<Project>('/api/projects/import', {
+      method: 'POST',
+      body: form,
+    })
+  },
   getProject: (id: number) => request<ProjectDetail>(`/api/projects/${id}`),
   updateTask: (id: number, body: Record<string, unknown>) =>
     request<TaskPatchResponse>(`/api/tasks/${id}`, {
@@ -156,5 +177,12 @@ export const api = {
   linkTaskComponent: (taskId: number, componentId: number) =>
     request<ProjectComponent>(`/api/tasks/${taskId}/link-component/${componentId}`, {
       method: 'POST',
+    }),
+  getStageTemplates: (projectId: number) =>
+    request<StageTemplateLibrary>(`/api/projects/${projectId}/stage-templates`),
+  addStageTemplate: (projectId: number, body: { name: string; group?: string | null; full_label?: string }) =>
+    request<StageTemplate>(`/api/projects/${projectId}/stage-templates`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 }

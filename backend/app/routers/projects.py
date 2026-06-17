@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+import json
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Category, Dependency, Goal, Milestone, Project, ProjectComponent, Release, Task
 from app.schemas import CategoryOut, DependencyOut, GoalOut, MilestoneOut, ProjectCreate, ProjectDetail, ProjectOut, ReleaseOut
 from app.services.components import component_to_out, load_component
+from app.services.project_import import import_project_from_upload
 from app.services.tasks import load_task, task_to_out
 from sqlalchemy.orm import joinedload
 from app.models import Dependency as DepModel
@@ -23,6 +26,38 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     db.add(project)
     db.commit()
     db.refresh(project)
+    return project
+
+
+@router.post("/import", response_model=ProjectOut, status_code=201)
+async def import_project(
+    file: UploadFile = File(...),
+    name: str | None = Form(None),
+    description: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    if not file.filename:
+        raise HTTPException(400, "Filename is required")
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "File is empty")
+    try:
+        project = import_project_from_upload(
+            db,
+            content=content,
+            filename=file.filename,
+            project_name=name.strip() if name and name.strip() else None,
+            project_description=description.strip() if description and description.strip() else None,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(400, str(exc)) from exc
+    except json.JSONDecodeError as exc:
+        db.rollback()
+        raise HTTPException(400, "Invalid JSON file") from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(400, f"Import failed: {exc}") from exc
     return project
 
 
@@ -57,6 +92,8 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
         id=project.id,
         name=project.name,
         description=project.description,
+        table_schema=project.table_schema,
+        stage_templates=project.stage_templates,
         created_at=project.created_at,
         categories=[CategoryOut.model_validate(c) for c in categories],
         components=[component_to_out(load_component(db, c.id) or c) for c in components],

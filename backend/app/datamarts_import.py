@@ -298,22 +298,51 @@ def compute_task_dates(phases: list[ParsedPhase]) -> tuple[date | None, date | N
 def parse_workbook(path: Path) -> list[ParsedRow]:
     wb = load_workbook(path, data_only=True)
     ws = wb.active
-    headers = [_cell_str(ws.cell(1, col).value) or "" for col in range(1, ws.max_column + 1)]
+    return parse_worksheet(ws.max_column, ws.max_row, lambda r, c: ws.cell(r, c).value)
+
+
+def parse_workbook_bytes(content: bytes) -> list[ParsedRow]:
+    from io import BytesIO
+
+    wb = load_workbook(BytesIO(content), data_only=True)
+    ws = wb.active
+    return parse_worksheet(ws.max_column, ws.max_row, lambda r, c: ws.cell(r, c).value)
+
+
+def parse_xls_bytes(content: bytes) -> list[ParsedRow]:
+    import xlrd
+
+    book = xlrd.open_workbook(file_contents=content)
+    sheet = book.sheet_by_index(0)
+
+    def cell_value(row_idx: int, col_idx: int):
+        if row_idx >= sheet.nrows or col_idx >= sheet.ncols:
+            return None
+        cell = sheet.cell(row_idx, col_idx)
+        if cell.ctype == xlrd.XL_CELL_DATE:
+            return xlrd.xldate.xldate_as_datetime(cell.value, book.datemode).date()
+        return cell.value
+
+    return parse_worksheet(sheet.ncols, sheet.nrows, lambda r, c: cell_value(r - 1, c - 1))
+
+
+def parse_worksheet(max_column: int, max_row: int, get_cell) -> list[ParsedRow]:
+    headers = [_cell_str(get_cell(1, col)) or "" for col in range(1, max_column + 1)]
     header_index = {name: idx + 1 for idx, name in enumerate(headers) if name}
 
     def col(name: str) -> int | None:
         return header_index.get(name)
 
     rows: list[ParsedRow] = []
-    for row_idx in range(2, ws.max_row + 1):
-        category = _cell_str(ws.cell(row_idx, col("БВ") or 3).value) or ""
-        data_source = _cell_str(ws.cell(row_idx, col("Источник") or 7).value)
-        subproduct = _cell_str(ws.cell(row_idx, col("Субпродукт") or 4).value)
+    for row_idx in range(2, max_row + 1):
+        category = _cell_str(get_cell(row_idx, col("БВ") or 3)) or ""
+        data_source = _cell_str(get_cell(row_idx, col("Источник") or 7))
+        subproduct = _cell_str(get_cell(row_idx, col("Субпродукт") or 4))
 
         if not any([category, data_source, subproduct]):
             continue
 
-        priority_raw = ws.cell(row_idx, col("Приоритет") or 1).value
+        priority_raw = get_cell(row_idx, col("Приоритет") or 1)
         priority = int(priority_raw) if priority_raw not in (None, "") else None
 
         phases: list[ParsedPhase] = []
@@ -321,7 +350,7 @@ def parse_workbook(path: Path) -> list[ParsedRow]:
             phase_col = col(phase_name)
             if not phase_col:
                 continue
-            parsed = parse_phase_value(ws.cell(row_idx, phase_col).value)
+            parsed = parse_phase_value(get_cell(row_idx, phase_col))
             if parsed:
                 phases.append(
                     ParsedPhase(
@@ -334,7 +363,7 @@ def parse_workbook(path: Path) -> list[ParsedRow]:
                 )
 
         start, end, ind_start, ind_end, pct = compute_task_dates(phases)
-        status = map_status(_cell_str(ws.cell(row_idx, col("Статус") or 2).value))
+        status = map_status(_cell_str(get_cell(row_idx, col("Статус") or 2)))
         if pct >= 100 and status != TaskStatus.blocked:
             status = TaskStatus.done
 
@@ -344,18 +373,18 @@ def parse_workbook(path: Path) -> list[ParsedRow]:
                 status=status,
                 category=category or "Без категории",
                 subproduct=subproduct,
-                forms=_cell_str(ws.cell(row_idx, col("Формы") or 5).value),
-                customer=_cell_str(ws.cell(row_idx, col("Заказчик") or 6).value),
+                forms=_cell_str(get_cell(row_idx, col("Формы") or 5)),
+                customer=_cell_str(get_cell(row_idx, col("Заказчик") or 6)),
                 data_source=data_source,
-                platform=_cell_str(ws.cell(row_idx, col("Площадка") or 8).value),
-                area=_cell_str(ws.cell(row_idx, col("Область") or 9).value),
-                contractor=_cell_str(ws.cell(row_idx, col("Подрядчик") or 12).value),
-                desired_quarter=_cell_str(ws.cell(row_idx, col("Желаемый срок реализации") or 13).value),
-                attribute_count=_cell_str(ws.cell(row_idx, col("Количество атрибутов") or 14).value),
-                assignee=_cell_str(ws.cell(row_idx, col("Команда-исполнитель") or 11).value),
-                risks=_cell_str(ws.cell(row_idx, col("Риски") or 31).value),
-                notes=_cell_str(ws.cell(row_idx, col("Комментарий") or 32).value),
-                extra_info=_cell_str(ws.cell(row_idx, col("Прочая полезная инфомрация") or 36).value),
+                platform=_cell_str(get_cell(row_idx, col("Площадка") or 8)),
+                area=_cell_str(get_cell(row_idx, col("Область") or 9)),
+                contractor=_cell_str(get_cell(row_idx, col("Подрядчик") or 12)),
+                desired_quarter=_cell_str(get_cell(row_idx, col("Желаемый срок реализации") or 13)),
+                attribute_count=_cell_str(get_cell(row_idx, col("Количество атрибутов") or 14)),
+                assignee=_cell_str(get_cell(row_idx, col("Команда-исполнитель") or 11)),
+                risks=_cell_str(get_cell(row_idx, col("Риски") or 31)),
+                notes=_cell_str(get_cell(row_idx, col("Комментарий") or 32)),
+                extra_info=_cell_str(get_cell(row_idx, col("Прочая полезная инфомрация") or 36)),
                 phases=phases,
                 start_date=start,
                 end_date=end,
@@ -369,18 +398,27 @@ def parse_workbook(path: Path) -> list[ParsedRow]:
     return rows
 
 
-def import_datamarts(db: Session, xlsx_path: Path | None = None) -> Project:
-    path = xlsx_path or resolve_xlsx_path()
-    parsed_rows = parse_workbook(path)
+def parse_spreadsheet(content: bytes, filename: str) -> list[ParsedRow]:
+    ext = Path(filename).suffix.lower()
+    if ext == ".xlsx":
+        return parse_workbook_bytes(content)
+    if ext == ".xls":
+        return parse_xls_bytes(content)
+    raise ValueError(f"Unsupported spreadsheet format: {ext}")
 
-    existing = db.query(Project).filter(Project.name == PROJECT_NAME).first()
-    if existing:
-        db.delete(existing)
-        db.flush()
+
+def import_parsed_rows(
+    db: Session,
+    parsed_rows: list[ParsedRow],
+    project_name: str,
+    project_description: str | None = None,
+) -> Project:
+    if not parsed_rows:
+        raise ValueError("File contains no importable rows")
 
     project = Project(
-        name=PROJECT_NAME,
-        description="Реестр витрин данных — импорт из DataMarts.xlsx",
+        name=project_name,
+        description=project_description,
         created_at=datetime.utcnow(),
     )
     db.add(project)
@@ -443,3 +481,20 @@ def import_datamarts(db: Session, xlsx_path: Path | None = None) -> Project:
     db.commit()
     db.refresh(project)
     return project
+
+
+def import_datamarts(db: Session, xlsx_path: Path | None = None) -> Project:
+    path = xlsx_path or resolve_xlsx_path()
+    parsed_rows = parse_workbook(path)
+
+    existing = db.query(Project).filter(Project.name == PROJECT_NAME).first()
+    if existing:
+        db.delete(existing)
+        db.flush()
+
+    return import_parsed_rows(
+        db,
+        parsed_rows,
+        PROJECT_NAME,
+        "Реестр витрин данных — импорт из DataMarts.xlsx",
+    )

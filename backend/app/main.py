@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.context import user_name_var
-from app.routers import categories, comments, components, dependencies, goals, milestones, projects, releases, sub_stages, tasks
+from app.routers import categories, comments, components, dependencies, goals, milestones, projects, releases, stage_templates, sub_stages, tasks
 
 app = FastAPI(title="Project Manager Roadmap API", version="1.0.0")
 
@@ -37,6 +37,7 @@ app.include_router(categories.router, prefix="/api")
 app.include_router(releases.router, prefix="/api")
 app.include_router(goals.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
+app.include_router(stage_templates.router, prefix="/api")
 app.include_router(sub_stages.router, prefix="/api")
 app.include_router(dependencies.router, prefix="/api")
 app.include_router(milestones.router, prefix="/api")

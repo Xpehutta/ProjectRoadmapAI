@@ -54,6 +54,7 @@ def task_to_out(task: Task, db: Session | None = None) -> TaskOut:
         risks=task.risks,
         notes=task.notes,
         extra_info=task.extra_info,
+        custom_fields=task.custom_fields or {},
         component_id=merged["component_id"],
         component_name=merged["component_name"],
         component_version=merged["component_version"],

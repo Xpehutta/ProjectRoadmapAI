@@ -51,6 +51,7 @@ export function taskEditSnapshot(task: Task): Record<string, unknown> {
     risks: task.risks,
     notes: task.notes,
     extra_info: task.extra_info,
+    custom_fields: task.custom_fields ?? {},
     predecessor_refs: task.predecessors.map((p) => p.name).join(', '),
   }
 }
@@ -61,6 +62,9 @@ export function normValue(v: unknown): string {
 }
 
 export function valuesEqual(a: unknown, b: unknown): boolean {
+  if (typeof a === 'object' && typeof b === 'object' && a !== null && b !== null) {
+    return JSON.stringify(a) === JSON.stringify(b)
+  }
   return normValue(a) === normValue(b)
 }
 
@@ -70,6 +74,12 @@ export function applyPendingToTask(
 ): Task {
   if (!patch || Object.keys(patch).length === 0) return task
   const merged = { ...task, ...patch } as Task
+  if (patch.custom_fields && typeof patch.custom_fields === 'object') {
+    merged.custom_fields = {
+      ...(task.custom_fields ?? {}),
+      ...(patch.custom_fields as Record<string, string>),
+    }
+  }
   if (typeof patch.predecessor_refs === 'string') {
     // display only; predecessors array stays until save
     return merged

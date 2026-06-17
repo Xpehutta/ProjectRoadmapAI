@@ -15,7 +15,7 @@ import { Toolbar } from './components/Toolbar'
 import { ProjectStartPage } from './components/ProjectStartPage'
 import { SaveChangesBar } from './components/SaveChangesBar'
 import { UserNameModal } from './components/UserNameModal'
-import { useCreateProject, useProject, useProjects } from './hooks/useProject'
+import { useCreateProject, useImportProject, useProject, useProjects } from './hooks/useProject'
 import { useUnsavedChangesWarning } from './hooks/useUnsavedChangesWarning'
 import { useHasAnyPending } from './hooks/useEffectiveTasks'
 import { usePendingChangesStore } from './stores/pendingChangesStore'
@@ -35,6 +35,8 @@ function App() {
   const showAuditModal = useUIStore((s) => s.showAuditModal)
   const hasPendingChanges = useHasAnyPending()
   const createProject = useCreateProject()
+  const importProject = useImportProject()
+  const [importError, setImportError] = useState<string | null>(null)
   const [showCategories, setShowCategories] = useState(false)
   const [showComponents, setShowComponents] = useState(false)
   const [showReleases, setShowReleases] = useState(false)
@@ -80,6 +82,8 @@ function App() {
           selectedProjectId={activeProjectId ?? null}
           loadingProject={Boolean(activeProjectId && loadingProject)}
           creating={createProject.isPending}
+          importing={importProject.isPending}
+          importError={importError}
           onSelectProject={handleSelectProject}
           onCreateProject={(name, description) => {
             createProject.mutate(
@@ -87,6 +91,21 @@ function App() {
               {
                 onSuccess: (created) => {
                   setSelectedProjectId(created.id)
+                },
+              }
+            )
+          }}
+          onImportProject={(file, name, description) => {
+            setImportError(null)
+            importProject.mutate(
+              { file, name, description },
+              {
+                onSuccess: (created) => {
+                  setSelectedProjectId(created.id)
+                  setImportError(null)
+                },
+                onError: (err) => {
+                  setImportError(err instanceof Error ? err.message : ru.saveBar.failed)
                 },
               }
             )

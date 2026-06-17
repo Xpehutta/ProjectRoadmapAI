@@ -224,6 +224,110 @@ body { margin: 0; }
   font: inherit;
 }
 
+.start-page-dropzone {
+  margin-bottom: 16px;
+  padding: 20px 16px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.start-page-dropzone:hover,
+.start-page-dropzone.drag-over {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.start-page-dropzone.has-file {
+  border-style: solid;
+  border-color: #93c5fd;
+  background: #eff6ff;
+  cursor: default;
+}
+
+.start-page-file-input {
+  display: none;
+}
+
+.start-page-dropzone-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.start-page-dropzone-hint,
+.start-page-dropzone-formats {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.start-page-dropzone-formats {
+  margin-top: 4px;
+  font-size: 0.8rem;
+}
+
+.start-page-import-form {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.start-page-import-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.start-page-import-form input,
+.start-page-import-form textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.start-page-import-file {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.start-page-import-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.start-page-import-actions .start-page-enter {
+  flex: 1;
+  min-width: 160px;
+}
+
+.start-page-secondary.inline {
+  width: auto;
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.start-page-import-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #dc2626;
+}
+
 .link-btn {
   border: none;
   background: none;
@@ -867,11 +971,17 @@ body { margin: 0; }
 }
 
 .add-stage-form input[type="text"],
-.add-stage-form input[type="date"] {
+.add-stage-form input[type="date"],
+.add-stage-form select {
   padding: 6px 8px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   font-size: 0.85rem;
+}
+
+.add-stage-form select {
+  background: #fff;
+  max-width: 100%;
 }
 
 .inline-toggle {

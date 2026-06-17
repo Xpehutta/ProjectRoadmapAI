@@ -19,38 +19,16 @@ import {
   getTaskCategoryColor,
 } from '../utils/taskGroups'
 import { displayDataSource } from '../utils/taskDisplay'
+import {
+  getTaskCellValue,
+  resolveTableColumns,
+  STATUS_LABELS,
+  type TableColumnDef,
+} from '../utils/tableColumns'
+import { applyPendingToTask } from '../utils/taskPending'
 import { ru, STATUS_OPTIONS } from '../locale/ru'
 
 const STATUSES = STATUS_OPTIONS.map((s) => s.id)
-const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((s) => [s.id, s.label])) as Record<
-  TaskStatus,
-  string
->
-
-function textCell(
-  task: Task,
-  field: keyof Task,
-  stageFn: (task: Task, field: string, value: unknown) => void,
-  multiline = false
-) {
-  const value = task[field]
-  return multiline ? (
-    <textarea
-      className="cell-input"
-      key={`${field}-${task.id}-${value}`}
-      defaultValue={(value as string) ?? ''}
-      rows={2}
-      onBlur={(e) => stageFn(task, field, e.target.value || null)}
-    />
-  ) : (
-    <input
-      className="cell-input"
-      key={`${field}-${task.id}-${value}`}
-      defaultValue={(value as string) ?? ''}
-      onBlur={(e) => stageFn(task, field, e.target.value || null)}
-    />
-  )
-}
 
 function TableDateCell({
   baseTask,
@@ -112,6 +90,10 @@ export function TableView({ project }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const baseTasksById = useMemo(() => new Map(project.tasks.map((t) => [t.id, t])), [project.tasks])
+  const tableColumns = useMemo(
+    () => resolveTableColumns(project, effectiveTasks),
+    [project, effectiveTasks]
+  )
 
   const selectedTask = useMemo(
     () => (selectedTaskId ? project.tasks.find((t) => t.id === selectedTaskId) : undefined),
@@ -138,58 +120,79 @@ export function TableView({ project }: Props) {
     [setSelectedTaskId]
   )
 
-  const stage = (task: Task, field: string, value: unknown) => {
-    setError(null)
-    const base = baseTasksById.get(task.id) ?? task
-    if (field === 'predecessors') {
-      stageTaskChange(base, { predecessor_refs: value })
-      return
-    }
-    stageTaskChange(base, { [field]: value })
-  }
+  const stageColumn = useCallback(
+    (task: Task, col: TableColumnDef, value: unknown) => {
+      setError(null)
+      const base = baseTasksById.get(task.id) ?? task
+      const pending = taskChanges[task.id]?.patch
 
-  const columnHelper = createColumnHelper<Task>()
+      if (col.source === 'custom') {
+        const mergedCustom = {
+          ...(base.custom_fields ?? {}),
+          ...((pending?.custom_fields as Record<string, string>) ?? {}),
+          [col.key]: value ? String(value) : '',
+        }
+        stageTaskChange(base, { custom_fields: mergedCustom })
+        return
+      }
 
-  const columns = useMemo(
-    () => [
-      columnHelper.accessor('priority', {
-        header: 'Приоритет',
-        cell: (info) => (
-          <input
-            type="number"
-            className="cell-input narrow"
-            key={`pri-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue() ?? ''}
-            onBlur={(e) =>
-              stage(info.row.original, 'priority', e.target.value ? Number(e.target.value) : null)
-            }
-          />
-        ),
-      }),
-      columnHelper.accessor('status', {
-        header: 'Статус',
-        cell: (info) => (
+      if (col.key === 'predecessors') {
+        stageTaskChange(base, { predecessor_refs: value })
+        return
+      }
+
+      stageTaskChange(base, { [col.key]: value })
+    },
+    [baseTasksById, stageTaskChange, taskChanges]
+  )
+
+  const renderCell = useCallback(
+    (task: Task, col: TableColumnDef) => {
+      const pending = taskChanges[task.id]?.patch
+      const effective = applyPendingToTask(task, pending)
+      const base = baseTasksById.get(task.id) ?? task
+      const value = getTaskCellValue(effective, col)
+
+      if (col.key === 'data_source' && col.source === 'builtin') {
+        const label = displayDataSource(effective)
+        return (
+          <div className="table-source-cell">
+            <strong>{label}</strong>
+            {effective.subproduct && (
+              <span className="muted table-source-sub">{effective.subproduct}</span>
+            )}
+            {effective.component_id && effective.component_usage_count > 1 && (
+              <span className="badge shared-badge" title={ru.table.sharedSource}>
+                {ru.components.sharedBadge}
+              </span>
+            )}
+          </div>
+        )
+      }
+
+      if (col.type === 'status') {
+        return (
           <select
-            key={`st-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue()}
-            onChange={(e) => stage(info.row.original, 'status', e.target.value)}
+            key={`st-${task.id}-${value}`}
+            defaultValue={String(value ?? 'todo')}
+            onChange={(e) => stageColumn(task, col, e.target.value)}
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {STATUS_LABELS[s]}
+                {STATUS_LABELS[s as TaskStatus]}
               </option>
             ))}
           </select>
-        ),
-      }),
-      columnHelper.accessor('category_id', {
-        header: 'БВ',
-        cell: (info) => (
+        )
+      }
+
+      if (col.type === 'category') {
+        return (
           <select
-            key={`cat-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue() ?? ''}
+            key={`cat-${task.id}-${value}`}
+            defaultValue={effective.category_id ?? ''}
             onChange={(e) =>
-              stage(info.row.original, 'category_id', e.target.value ? Number(e.target.value) : null)
+              stageColumn(task, col, e.target.value ? Number(e.target.value) : null)
             }
           >
             <option value="">—</option>
@@ -199,232 +202,117 @@ export function TableView({ project }: Props) {
               </option>
             ))}
           </select>
-        ),
-      }),
-      columnHelper.accessor('name', {
-        header: ru.table.usage,
-        cell: (info) => (
-          <input
-            className={`cell-input ${pendingIds.has(info.row.original.id) ? 'pending' : ''}`}
-            key={`name-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue()}
-            onBlur={(e) => {
-              if (e.target.value !== info.getValue()) stage(info.row.original, 'name', e.target.value)
-            }}
+        )
+      }
+
+      if (col.type === 'date') {
+        const showShift = col.key === 'end_date'
+        const indicativeHint =
+          col.key === 'end_date' && showIndicative ? effective.indicative_end : null
+        return (
+          <TableDateCell
+            baseTask={base}
+            value={(value as string | null) ?? null}
+            showShift={showShift}
+            indicativeHint={indicativeHint}
+            onBlur={(v) => stageColumn(task, col, v)}
           />
-        ),
-      }),
-      columnHelper.accessor('data_source', {
-        header: 'Источник',
-        cell: (info) => {
-          const t = info.row.original
-          const label = displayDataSource(t)
-          return (
-            <div className="table-source-cell">
-              <strong>{label}</strong>
-              {t.subproduct && (
-                <span className="muted table-source-sub">{t.subproduct}</span>
-              )}
-              {t.component_id && t.component_usage_count > 1 && (
-                <span className="badge shared-badge" title={ru.table.sharedSource}>
-                  {ru.components.sharedBadge}
-                </span>
-              )}
-            </div>
-          )
-        },
-      }),
-      columnHelper.accessor('subproduct', {
-        header: 'Субпродукт',
-        cell: (info) => textCell(info.row.original, 'subproduct', stage),
-      }),
-      columnHelper.accessor('forms', {
-        header: 'Формы',
-        cell: (info) => textCell(info.row.original, 'forms', stage),
-      }),
-      columnHelper.accessor('customer', {
-        header: 'Заказчик',
-        cell: (info) => textCell(info.row.original, 'customer', stage),
-      }),
-      columnHelper.accessor('platform', {
-        header: 'Площадка',
-        cell: (info) => textCell(info.row.original, 'platform', stage),
-      }),
-      columnHelper.accessor('area', {
-        header: 'Область',
-        cell: (info) => textCell(info.row.original, 'area', stage),
-      }),
-      columnHelper.accessor('assignee', {
-        header: 'Команда',
-        cell: (info) => textCell(info.row.original, 'assignee', stage),
-      }),
-      columnHelper.accessor('contractor', {
-        header: 'Подрядчик',
-        cell: (info) => textCell(info.row.original, 'contractor', stage),
-      }),
-      columnHelper.accessor('desired_quarter', {
-        header: 'Срок',
-        cell: (info) => textCell(info.row.original, 'desired_quarter', stage),
-      }),
-      columnHelper.accessor('attribute_count', {
-        header: 'Атрибуты',
-        cell: (info) => textCell(info.row.original, 'attribute_count', stage),
-      }),
-      columnHelper.accessor('start_date', {
-        header: 'Начало',
-        cell: (info) => {
-          const base = baseTasksById.get(info.row.original.id) ?? info.row.original
-          return (
-            <TableDateCell
-              baseTask={base}
-              value={info.getValue()}
-              showShift={false}
-              onBlur={(v) => stage(info.row.original, 'start_date', v)}
-            />
-          )
-        },
-      }),
-      columnHelper.accessor('end_date', {
-        header: 'Окончание',
-        cell: (info) => {
-          const base = baseTasksById.get(info.row.original.id) ?? info.row.original
-          const task = info.row.original
-          return (
-            <TableDateCell
-              baseTask={base}
-              value={info.getValue()}
-              indicativeHint={showIndicative ? task.indicative_end : null}
-              showShift
-              onBlur={(v) => stage(info.row.original, 'end_date', v)}
-            />
-          )
-        },
-      }),
-      columnHelper.accessor('indicative_start', {
-        header: 'Инд. начало',
-        cell: (info) => (
-          <input
-            type="date"
-            className="cell-input"
-            key={`is-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue() ?? ''}
-            onBlur={(e) => stage(info.row.original, 'indicative_start', e.target.value || null)}
-          />
-        ),
-      }),
-      columnHelper.accessor('indicative_end', {
-        header: 'Инд. окончание',
-        cell: (info) => (
-          <input
-            type="date"
-            className="cell-input"
-            key={`ie-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue() ?? ''}
-            onBlur={(e) => stage(info.row.original, 'indicative_end', e.target.value || null)}
-          />
-        ),
-      }),
-      columnHelper.accessor('duration_days', {
-        header: 'Длительность',
-        cell: (info) => (
+        )
+      }
+
+      if (col.type === 'number') {
+        return (
           <input
             type="number"
             className="cell-input narrow"
-            key={`dur-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue() ?? ''}
+            key={`${col.key}-${task.id}-${value}`}
+            defaultValue={value == null || value === '' ? '' : String(value)}
             onBlur={(e) =>
-              stage(
-                info.row.original,
-                'duration_days',
+              stageColumn(
+                task,
+                col,
                 e.target.value ? Number(e.target.value) : null
               )
             }
           />
-        ),
-      }),
-      columnHelper.accessor('completion_pct', {
-        header: '%',
-        cell: (info) => <span>{info.getValue()}%</span>,
-      }),
-      columnHelper.accessor('risks', {
-        header: 'Риски',
-        cell: (info) => textCell(info.row.original, 'risks', stage, true),
-      }),
-      columnHelper.accessor('notes', {
-        header: 'Комментарий',
-        cell: (info) => textCell(info.row.original, 'notes', stage, true),
-      }),
-      columnHelper.accessor('planned_cost', {
-        header: ru.table.plannedCost,
-        cell: (info) => (
+        )
+      }
+
+      if (col.type === 'readonly') {
+        if (col.key === 'completion_pct') {
+          return <span>{effective.completion_pct}%</span>
+        }
+        return <span>{value == null ? '' : String(value)}</span>
+      }
+
+      if (col.key === 'predecessors') {
+        const refs =
+          (pending?.predecessor_refs as string) ??
+          effective.predecessors.map((p) => p.name).join(', ')
+        return (
           <input
-            className="cell-input narrow"
-            key={`pc-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue() ?? ''}
-            onBlur={(e) => stage(info.row.original, 'planned_cost', e.target.value || null)}
+            className="cell-input"
+            key={`pred-${task.id}-${refs}`}
+            defaultValue={refs}
+            placeholder={ru.table.predecessorsPlaceholder}
+            onBlur={(e) => stageColumn(task, col, e.target.value)}
           />
-        ),
-      }),
-      columnHelper.accessor('actual_cost', {
-        header: ru.table.actualCost,
-        cell: (info) => (
+        )
+      }
+
+      if (col.key === 'name') {
+        return (
           <input
-            className="cell-input narrow"
-            key={`ac-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue() ?? ''}
-            onBlur={(e) => stage(info.row.original, 'actual_cost', e.target.value || null)}
+            className={`cell-input ${pendingIds.has(task.id) ? 'pending' : ''}`}
+            key={`name-${task.id}-${value}`}
+            defaultValue={String(value ?? '')}
+            onBlur={(e) => {
+              if (e.target.value !== value) stageColumn(task, col, e.target.value)
+            }}
           />
-        ),
-      }),
-      columnHelper.accessor('planned_effort', {
-        header: ru.table.plannedEffort,
-        cell: (info) => (
-          <input
-            className="cell-input narrow"
-            key={`pe-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue() ?? ''}
-            onBlur={(e) => stage(info.row.original, 'planned_effort', e.target.value || null)}
-          />
-        ),
-      }),
-      columnHelper.accessor('actual_effort', {
-        header: ru.table.actualEffort,
-        cell: (info) => (
-          <input
-            className="cell-input narrow"
-            key={`ae-${info.row.original.id}-${info.getValue()}`}
-            defaultValue={info.getValue() ?? ''}
-            onBlur={(e) => stage(info.row.original, 'actual_effort', e.target.value || null)}
-          />
-        ),
-      }),
-      columnHelper.display({
-        id: 'predecessors',
-        header: ru.table.predecessors,
-        cell: ({ row }) => {
-          const refs =
-            (taskChanges[row.original.id]?.patch.predecessor_refs as string) ??
-            row.original.predecessors.map((p) => p.name).join(', ')
-          return (
-            <input
-              className="cell-input"
-              key={`pred-${row.original.id}-${refs}`}
-              defaultValue={refs}
-              placeholder={ru.table.predecessorsPlaceholder}
-              onBlur={(e) => stage(row.original, 'predecessors', e.target.value)}
-            />
-          )
-        },
-      }),
-    ],
+        )
+      }
+
+      const multiline = col.type === 'textarea'
+      return multiline ? (
+        <textarea
+          className="cell-input"
+          key={`${col.key}-${task.id}-${value}`}
+          defaultValue={String(value ?? '')}
+          rows={2}
+          onBlur={(e) => stageColumn(task, col, e.target.value || null)}
+        />
+      ) : (
+        <input
+          className="cell-input"
+          key={`${col.key}-${task.id}-${value}`}
+          defaultValue={String(value ?? '')}
+          onBlur={(e) => stageColumn(task, col, e.target.value || null)}
+        />
+      )
+    },
     [
-      project.categories,
-      effectiveTasks,
-      pendingIds,
-      taskChanges,
       baseTasksById,
+      pendingIds,
+      project.categories,
       showIndicative,
+      stageColumn,
+      taskChanges,
     ]
+  )
+
+  const columnHelper = createColumnHelper<Task>()
+
+  const columns = useMemo(
+    () =>
+      tableColumns.map((col) =>
+        columnHelper.display({
+          id: col.key,
+          header: col.label,
+          cell: ({ row }) => renderCell(row.original, col),
+        })
+      ),
+    [tableColumns, renderCell]
   )
 
   const table = useReactTable({
@@ -460,6 +348,8 @@ export function TableView({ project }: Props) {
     })
   }
 
+  const isAdaptive = !project.table_schema?.length
+
   return (
     <div className="table-view">
       {error && <div className="error-banner">{error}</div>}
@@ -479,7 +369,9 @@ export function TableView({ project }: Props) {
         {selectedTask && (
           <span className="table-selected-hint">{ru.table.selectedRow(selectedTask.name)}</span>
         )}
-        <span className="table-hint">{ru.table.hint}</span>
+        <span className="table-hint">
+          {isAdaptive ? ru.table.adaptiveHint : ru.table.hint}
+        </span>
       </div>
       <div className="table-scroll">
         <table>
