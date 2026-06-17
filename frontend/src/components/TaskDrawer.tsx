@@ -3,12 +3,15 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { api } from '../api/client'
 import { DateShiftIndicator } from './DateShiftIndicator'
 import { PendingShiftComment } from './PendingShiftComment'
+import { StageCompleteModal } from './StageCompleteModal'
+import { StageShiftModal } from './StageShiftModal'
 import { useTaskDateShifts } from '../hooks/useTaskDateShift'
 import { useEffectiveTask } from '../hooks/useEffectiveTasks'
 import { useDeleteTask } from '../hooks/useProject'
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
+import { useSavedDateShiftsStore } from '../stores/savedDateShiftsStore'
 import { useUIStore } from '../stores/uiStore'
-import type { AuditEventType, Moscow, ProjectDetail, StageTemplate, Task } from '../types'
+import type { AuditEventType, Moscow, ProjectDetail, StageTemplate, SubStage, Task } from '../types'
 import {
   CUSTOM_STAGE_VALUE,
   existingStageNameSet,
@@ -18,6 +21,13 @@ import {
 import { formatLocaleDateTime, HISTORY_FILTER_OPTIONS, ru } from '../locale/ru'
 import { formatScore, MOSCOW_OPTIONS, prioritizationScore } from '../utils/scoring'
 import { refreshProjectAfterSubStageChange } from '../utils/subStageRefresh'
+import {
+  sortedSubStages,
+  stageEffectiveEndDate,
+  stageNeedsFollowingStartFill,
+  stageNeedsPrecedingEndFill,
+} from '../utils/subStageDates'
+import { indicativeRangeChanged, buildStageShiftEntry, stageDatesChanged, stagePlannedDates } from '../utils/stageComplete'
 
 interface Props {
   project: ProjectDetail
@@ -33,11 +43,23 @@ export function TaskDrawer({ project, task }: Props) {
   const [historyFilter, setHistoryFilter] = useState<AuditEventType | 'all'>('all')
   const [comment, setComment] = useState('')
   const [newStageName, setNewStageName] = useState('')
-  const [newStageDueDate, setNewStageDueDate] = useState('')
+  const [newStageStartDate, setNewStageStartDate] = useState('')
+  const [newStageEndDate, setNewStageEndDate] = useState('')
   const [newStageIndicative, setNewStageIndicative] = useState(false)
   const [addingStage, setAddingStage] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [saveTemplateForReuse, setSaveTemplateForReuse] = useState(false)
+  const [completingStage, setCompletingStage] = useState<SubStage | null>(null)
+  const [completingStageSubmitting, setCompletingStageSubmitting] = useState(false)
+  const [shiftingStage, setShiftingStage] = useState<{
+    stage: SubStage
+    stageIndex: number
+    initial?: { start_date: string | null; end_date: string | null }
+  } | null>(null)
+  const [shiftingStageSubmitting, setShiftingStageSubmitting] = useState(false)
+  const [stageDateInputReset, setStageDateInputReset] = useState(0)
+  const recordIndicativeShift = useSavedDateShiftsStore((s) => s.recordIndicativeShift)
+  const recordStageShift = useSavedDateShiftsStore((s) => s.recordStageShift)
 
   const { data: stageLibrary } = useQuery({
     queryKey: ['stage-templates', project.id],
@@ -48,6 +70,8 @@ export function TaskDrawer({ project, task }: Props) {
     () => existingStageNameSet(task.sub_stages.map((s) => s.name)),
     [task.sub_stages]
   )
+
+  const orderedStages = useMemo(() => sortedSubStages(task.sub_stages), [task.sub_stages])
 
   const renderTemplateOptions = (templates: StageTemplate[] | undefined, sectionLabel: string) => {
     if (!templates?.length) return null
@@ -116,14 +140,183 @@ export function TaskDrawer({ project, task }: Props) {
     },
   })
 
-  const toggleStage = async (stageId: number, isDone: boolean) => {
-    await api.updateSubStage(task.id, stageId, { is_done: !isDone })
+  const toggleStage = async (stage: SubStage) => {
+    if (stage.is_done) {
+      await api.updateSubStage(task.id, stage.id, { is_done: false })
+      await refreshProjectAfterSubStageChange(qc, project.id)
+      return
+    }
+    setCompletingStage(stage)
+  }
+
+  const openStageShift = (
+    stageItem: SubStage,
+    stageIndex: number,
+    initial?: { start_date: string | null; end_date: string | null }
+  ) => {
+    setShiftingStage({ stage: stageItem, stageIndex, initial })
+  }
+
+  const cancelStageShift = () => {
+    setShiftingStage(null)
+    setStageDateInputReset((n) => n + 1)
+  }
+
+  const maybeFillPrecedingEnd = async (stageIndex: number, startDate: string | null) => {
+    const fill = stageNeedsPrecedingEndFill(task.sub_stages, stageIndex, startDate)
+    if (!fill) return
+    if (!confirm(ru.drawer.autoFillPrecedingEnd(fill.proposedEnd, fill.preceding.name))) return
+    await api.updateSubStage(task.id, fill.preceding.id, { end_date: fill.proposedEnd })
     await refreshProjectAfterSubStageChange(qc, project.id)
+  }
+
+  const handleStageCompleteConfirm = async (data: {
+    start_date: string | null
+    end_date: string | null
+    comment: string
+  }) => {
+    if (!completingStage) return
+    const stageItem = completingStage
+    const stageIndex = orderedStages.findIndex((s) => s.id === stageItem.id)
+    const recordShift = stageDatesChanged(stageItem, data)
+
+    setCompletingStageSubmitting(true)
+    try {
+      await persistStageDates(stageItem, data, {
+        stageIndex,
+        recordShift,
+        markDone: true,
+        comment: data.comment,
+      })
+      setCompletingStage(null)
+    } finally {
+      setCompletingStageSubmitting(false)
+    }
+  }
+
+  const handleStageShiftConfirm = async (data: {
+    start_date: string | null
+    end_date: string | null
+    comment: string
+  }) => {
+    if (!shiftingStage) return
+    setShiftingStageSubmitting(true)
+    try {
+      await persistStageDates(shiftingStage.stage, data, {
+        stageIndex: shiftingStage.stageIndex,
+        recordShift: true,
+        comment: data.comment,
+      })
+      setShiftingStage(null)
+    } finally {
+      setShiftingStageSubmitting(false)
+    }
+  }
+
+  const persistStageDates = async (
+    stageItem: SubStage,
+    confirmed: { start_date: string | null; end_date: string | null },
+    options: {
+      stageIndex: number
+      recordShift: boolean
+      markDone?: boolean
+      comment?: string
+    }
+  ) => {
+    const datesChanged = stageDatesChanged(stageItem, confirmed)
+    const prevIndicative = {
+      start: effective.indicative_start,
+      end: effective.indicative_end,
+    }
+
+    if (confirmed.start_date && options.stageIndex > 0) {
+      await maybeFillPrecedingEnd(options.stageIndex, confirmed.start_date)
+    }
+
+    await api.updateSubStage(task.id, stageItem.id, {
+      ...(options.markDone ? { is_done: true } : {}),
+      start_date: confirmed.start_date,
+      end_date: confirmed.end_date,
+    })
+    await refreshProjectAfterSubStageChange(qc, project.id)
+
+    const updatedProject = qc.getQueryData<ProjectDetail>(['project', project.id])
+    const updatedTask = updatedProject?.tasks.find((t) => t.id === task.id)
+
+    if (datesChanged && options.comment?.trim()) {
+      await api.addComment(task.id, `Этап «${stageItem.name}»: ${options.comment.trim()}`)
+      await qc.invalidateQueries({ queryKey: ['comments', task.id] })
+      await qc.invalidateQueries({ queryKey: ['history', task.id] })
+    }
+
+    if (datesChanged && options.recordShift) {
+      const stageShift = buildStageShiftEntry(task.id, stageItem, confirmed, options.comment)
+      if (stageShift) {
+        recordStageShift(stageShift)
+      }
+
+      if (updatedTask) {
+        const nextIndicative = {
+          start: updatedTask.indicative_start,
+          end: updatedTask.indicative_end,
+        }
+        if (
+          indicativeRangeChanged(prevIndicative, nextIndicative) &&
+          prevIndicative.start &&
+          prevIndicative.end &&
+          nextIndicative.start &&
+          nextIndicative.end
+        ) {
+          recordIndicativeShift({
+            taskId: task.id,
+            origStart: prevIndicative.start,
+            origEnd: prevIndicative.end,
+            curStart: nextIndicative.start,
+            curEnd: nextIndicative.end,
+            shiftComment: options.comment?.trim(),
+          })
+        }
+      }
+    }
   }
 
   const completeAll = async () => {
     await api.completeAllSubStages(task.id)
     await refreshProjectAfterSubStageChange(qc, project.id)
+  }
+
+  const resolveNewStageStartDate = (): string | null => {
+    if (newStageStartDate) return newStageStartDate
+    const fill = stageNeedsFollowingStartFill(task.sub_stages, null)
+    if (!fill) return null
+    if (!confirm(ru.drawer.autoFillFollowingStart(fill.proposedStart, fill.preceding.name))) {
+      return null
+    }
+    return fill.proposedStart
+  }
+
+  const handleNewStageStartChange = async (value: string) => {
+    setNewStageStartDate(value)
+    if (value && task.sub_stages.length > 0) {
+      await maybeFillPrecedingEnd(task.sub_stages.length, value)
+    }
+  }
+
+  const handleStageDateBlur = (
+    stageItem: SubStage,
+    field: 'start_date' | 'end_date',
+    rawValue: string,
+    stageIndex: number
+  ) => {
+    const planned = stagePlannedDates(stageItem)
+    const savedValue =
+      field === 'start_date' ? (stageItem.start_date ?? '') : (planned.end_date ?? '')
+    if (rawValue === savedValue) return
+
+    openStageShift(stageItem, stageIndex, {
+      start_date: field === 'start_date' ? rawValue || null : planned.start_date,
+      end_date: field === 'end_date' ? rawValue || null : planned.end_date,
+    })
   }
 
   const addStage = async (e: FormEvent) => {
@@ -132,10 +325,15 @@ export function TaskDrawer({ project, task }: Props) {
     if (!name) return
     setAddingStage(true)
     try {
+      const startDate = resolveNewStageStartDate()
+      if (startDate && task.sub_stages.length > 0) {
+        await maybeFillPrecedingEnd(task.sub_stages.length, startDate)
+      }
       await api.createSubStage(task.id, {
         name,
         sort_order: task.sub_stages.length,
-        due_date: newStageDueDate || null,
+        start_date: startDate,
+        end_date: newStageEndDate || null,
         is_indicative: newStageIndicative,
       })
       if (saveTemplateForReuse && selectedTemplate === CUSTOM_STAGE_VALUE) {
@@ -143,7 +341,8 @@ export function TaskDrawer({ project, task }: Props) {
         await qc.invalidateQueries({ queryKey: ['stage-templates', project.id] })
       }
       setNewStageName('')
-      setNewStageDueDate('')
+      setNewStageStartDate('')
+      setNewStageEndDate('')
       setNewStageIndicative(false)
       setSelectedTemplate('')
       setSaveTemplateForReuse(false)
@@ -170,6 +369,7 @@ export function TaskDrawer({ project, task }: Props) {
   }
 
   return (
+    <>
     <aside className="task-drawer">
       <header>
         <h2>{task.name}</h2>
@@ -469,6 +669,9 @@ export function TaskDrawer({ project, task }: Props) {
             onBlur={(e) => patch('indicative_end', e.target.value || null)}
           />
         </label>
+        {task.sub_stages.length > 0 && (
+          <p className="muted stage-indicative-hint">{ru.drawer.indicativeFromStages}</p>
+        )}
         <label>
           {ru.drawer.plannedCost}
           <input
@@ -540,19 +743,62 @@ export function TaskDrawer({ project, task }: Props) {
           )}
         </h3>
         <ul className="checklist phase-checklist">
-          {task.sub_stages.map((s) => (
+          {orderedStages.map((s, stageIndex) => (
             <li key={s.id} className={s.is_indicative ? 'indicative-phase' : ''}>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={s.is_done}
-                  onChange={() => toggleStage(s.id, s.is_done)}
-                />
-                <span className={s.is_done ? 'done' : ''}>{s.name}</span>
-              </label>
+              <div className="phase-row-header">
+                <span className={`phase-title ${s.is_done ? 'done' : ''}`}>
+                  {s.is_done ? '✓ ' : ''}
+                  {s.name}
+                </span>
+                <div className="phase-actions">
+                  {s.is_done ? (
+                    <button
+                      type="button"
+                      className="btn-link"
+                      onClick={() => void toggleStage(s)}
+                    >
+                      {ru.drawer.unmarkStage}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-small"
+                      onClick={() => setCompletingStage(s)}
+                    >
+                      {ru.drawer.stageDone}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-small btn-save-quiet"
+                    onClick={() => openStageShift(s, stageIndex)}
+                  >
+                    {ru.drawer.stageShift}
+                  </button>
+                </div>
+              </div>
               <div className="phase-meta">
-                {s.due_date && <span className="phase-date">{s.due_date}</span>}
-                {s.note && s.note !== s.due_date && <span className="phase-note">{s.note}</span>}
+                <label className="phase-date-field">
+                  <span>{ru.drawer.stageStartDate}</span>
+                  <input
+                    key={`${s.id}-start-${s.start_date}-${stageDateInputReset}`}
+                    type="date"
+                    defaultValue={s.start_date ?? ''}
+                    onBlur={(e) => handleStageDateBlur(s, 'start_date', e.target.value, stageIndex)}
+                  />
+                </label>
+                <label className="phase-date-field">
+                  <span>{ru.drawer.stageEndDate}</span>
+                  <input
+                    key={`${s.id}-end-${s.end_date ?? s.due_date}-${stageDateInputReset}`}
+                    type="date"
+                    defaultValue={s.end_date ?? s.due_date ?? ''}
+                    onBlur={(e) => handleStageDateBlur(s, 'end_date', e.target.value, stageIndex)}
+                  />
+                </label>
+                {s.note && s.note !== stageEffectiveEndDate(s) && (
+                  <span className="phase-note">{s.note}</span>
+                )}
               </div>
             </li>
           ))}
@@ -593,11 +839,19 @@ export function TaskDrawer({ project, task }: Props) {
             </label>
           )}
           <label>
-            {ru.drawer.stageDueDate}
+            {ru.drawer.stageStartDate}
             <input
               type="date"
-              value={newStageDueDate}
-              onChange={(e) => setNewStageDueDate(e.target.value)}
+              value={newStageStartDate}
+              onChange={(e) => void handleNewStageStartChange(e.target.value)}
+            />
+          </label>
+          <label>
+            {ru.drawer.stageEndDate}
+            <input
+              type="date"
+              value={newStageEndDate}
+              onChange={(e) => setNewStageEndDate(e.target.value)}
             />
           </label>
           <label className="toggle inline-toggle">
@@ -684,5 +938,23 @@ export function TaskDrawer({ project, task }: Props) {
         </button>
       </section>
     </aside>
+    {completingStage && (
+      <StageCompleteModal
+        stage={completingStage}
+        onCancel={() => setCompletingStage(null)}
+        onConfirm={handleStageCompleteConfirm}
+        submitting={completingStageSubmitting}
+      />
+    )}
+    {shiftingStage && (
+      <StageShiftModal
+        stage={shiftingStage.stage}
+        initial={shiftingStage.initial}
+        onCancel={cancelStageShift}
+        onConfirm={handleStageShiftConfirm}
+        submitting={shiftingStageSubmitting}
+      />
+    )}
+  </>
   )
 }

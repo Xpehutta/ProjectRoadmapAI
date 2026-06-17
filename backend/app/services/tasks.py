@@ -14,6 +14,13 @@ def task_to_out(task: Task, db: Session | None = None) -> TaskOut:
                     PredecessorRef(id=dep.predecessor.id, name=dep.predecessor.name, type=dep.type)
                 )
     merged = merge_task_fields(task)
+    sub_stages = effective_sub_stages(task)
+    if sub_stages:
+        from app.services.stage_indicative import indicative_dates_from_stage_outs
+
+        ind_start, ind_end = indicative_dates_from_stage_outs(sub_stages)
+        merged["indicative_start"] = ind_start
+        merged["indicative_end"] = ind_end
     return TaskOut(
         id=task.id,
         project_id=task.project_id,
@@ -59,7 +66,7 @@ def task_to_out(task: Task, db: Session | None = None) -> TaskOut:
         component_name=merged["component_name"],
         component_version=merged["component_version"],
         component_usage_count=merged["component_usage_count"],
-        sub_stages=effective_sub_stages(task),
+        sub_stages=sub_stages,
         predecessors=preds,
     )
 

@@ -12,6 +12,17 @@ export interface SavedTaskDateShift {
   shiftComment?: string
 }
 
+export interface SavedStageDateShift {
+  taskId: number
+  stageId: number
+  stageName: string
+  origStart: string
+  origEnd: string
+  curStart: string
+  curEnd: string
+  shiftComment?: string
+}
+
 export interface SavedMilestoneDateShift {
   milestoneId: number
   original_date: string
@@ -21,8 +32,11 @@ export interface SavedMilestoneDateShift {
 
 interface SavedDateShiftsState {
   taskShifts: Record<number, SavedTaskDateShift[]>
+  stageShifts: Record<number, SavedStageDateShift[]>
   milestoneShifts: Record<number, SavedMilestoneDateShift[]>
   recordTaskFromPending: (change: PendingTaskChange) => void
+  recordIndicativeShift: (entry: SavedTaskDateShift) => void
+  recordStageShift: (entry: SavedStageDateShift) => void
   recordMilestoneFromPending: (change: PendingMilestoneDate) => void
   clearTaskShifts: (taskId: number) => void
 }
@@ -31,6 +45,7 @@ export const useSavedDateShiftsStore = create<SavedDateShiftsState>()(
   persist(
     (set) => ({
       taskShifts: {},
+      stageShifts: {},
       milestoneShifts: {},
 
       recordTaskFromPending: (change) =>
@@ -50,6 +65,28 @@ export const useSavedDateShiftsStore = create<SavedDateShiftsState>()(
             taskShifts: {
               ...s.taskShifts,
               [change.taskId]: [...prev, entry],
+            },
+          }
+        }),
+
+      recordIndicativeShift: (entry) =>
+        set((s) => {
+          const prev = s.taskShifts[entry.taskId] ?? []
+          return {
+            taskShifts: {
+              ...s.taskShifts,
+              [entry.taskId]: [...prev, entry],
+            },
+          }
+        }),
+
+      recordStageShift: (entry) =>
+        set((s) => {
+          const prev = s.stageShifts[entry.taskId] ?? []
+          return {
+            stageShifts: {
+              ...s.stageShifts,
+              [entry.taskId]: [...prev.filter((e) => e.stageId !== entry.stageId), entry],
             },
           }
         }),
@@ -74,10 +111,19 @@ export const useSavedDateShiftsStore = create<SavedDateShiftsState>()(
 
       clearTaskShifts: (taskId) =>
         set((s) => {
-          if (!s.taskShifts[taskId]) return s
-          const next = { ...s.taskShifts }
-          delete next[taskId]
-          return { taskShifts: next }
+          const nextTask = { ...s.taskShifts }
+          const nextStage = { ...s.stageShifts }
+          let changed = false
+          if (nextTask[taskId]) {
+            delete nextTask[taskId]
+            changed = true
+          }
+          if (nextStage[taskId]) {
+            delete nextStage[taskId]
+            changed = true
+          }
+          if (!changed) return s
+          return { taskShifts: nextTask, stageShifts: nextStage }
         }),
     }),
     {
@@ -85,6 +131,7 @@ export const useSavedDateShiftsStore = create<SavedDateShiftsState>()(
       storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         taskShifts: state.taskShifts,
+        stageShifts: state.stageShifts,
         milestoneShifts: state.milestoneShifts,
       }),
     }

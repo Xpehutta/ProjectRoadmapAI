@@ -6,9 +6,15 @@ from app.models import ComponentSubStage, Task, TaskSubStage
 from app.schemas import SubStageCreate, SubStageOut, SubStageUpdate
 from app.services.completion import complete_all_sub_stages, recompute_completion
 from app.services.component_merge import bump_linked_task_versions, component_stage_to_out, effective_sub_stages
+from app.services.stage_indicative import recompute_actual_dates, recompute_indicative_dates
 from app.services.tasks import load_task
 
 router = APIRouter(prefix="/tasks/{task_id}/sub-stages", tags=["sub-stages"])
+
+
+def _sync_stage_due_date(updates: dict) -> None:
+    if updates.get("end_date") is not None and updates.get("due_date") is None:
+        updates["due_date"] = updates["end_date"]
 
 
 @router.get("", response_model=list[SubStageOut])
@@ -25,6 +31,7 @@ def create_sub_stage(task_id: int, payload: SubStageCreate, db: Session = Depend
     if not task:
         raise HTTPException(404, "Task not found")
     data = payload.model_dump()
+    _sync_stage_due_date(data)
     if task.component_id and task.component:
         existing = task.component.sub_stages or []
         if data.get("sort_order", 0) == 0 and existing:
@@ -33,6 +40,8 @@ def create_sub_stage(task_id: int, payload: SubStageCreate, db: Session = Depend
         db.add(stage)
         db.flush()
         recompute_completion(db, task)
+        recompute_indicative_dates(db, task)
+        recompute_actual_dates(db, task)
         bump_linked_task_versions(task)
         db.commit()
         db.refresh(stage)
@@ -50,6 +59,8 @@ def create_sub_stage(task_id: int, payload: SubStageCreate, db: Session = Depend
     db.add(stage)
     db.flush()
     recompute_completion(db, task)
+    recompute_indicative_dates(db, task)
+    recompute_actual_dates(db, task)
     bump_linked_task_versions(task)
     db.commit()
     db.refresh(stage)
@@ -74,22 +85,17 @@ def update_sub_stage(
         )
         if not stage:
             raise HTTPException(404, "Sub-stage not found")
-        for k, v in payload.model_dump(exclude_unset=True).items():
+        updates = payload.model_dump(exclude_unset=True)
+        _sync_stage_due_date(updates)
+        for k, v in updates.items():
             setattr(stage, k, v)
         recompute_completion(db, task)
+        recompute_indicative_dates(db, task)
+        recompute_actual_dates(db, task)
         bump_linked_task_versions(task)
         db.commit()
         db.refresh(stage)
-        return SubStageOut(
-            id=stage.id,
-            task_id=0,
-            name=stage.name,
-            sort_order=stage.sort_order,
-            is_done=stage.is_done,
-            due_date=stage.due_date,
-            note=stage.note,
-            is_indicative=stage.is_indicative,
-        )
+        return component_stage_to_out(stage)
     stage = (
         db.query(TaskSubStage)
         .filter(TaskSubStage.id == stage_id, TaskSubStage.task_id == task_id)
@@ -97,9 +103,13 @@ def update_sub_stage(
     )
     if not stage:
         raise HTTPException(404, "Sub-stage not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    _sync_stage_due_date(updates)
+    for k, v in updates.items():
         setattr(stage, k, v)
     recompute_completion(db, task)
+    recompute_indicative_dates(db, task)
+    recompute_actual_dates(db, task)
     bump_linked_task_versions(task)
     db.commit()
     db.refresh(stage)
@@ -112,6 +122,8 @@ def complete_all(task_id: int, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(404, "Task not found")
     complete_all_sub_stages(db, task)
+    recompute_indicative_dates(db, task)
+    recompute_actual_dates(db, task)
     if not (task.component_id and task.component):
         bump_linked_task_versions(task)
     db.commit()

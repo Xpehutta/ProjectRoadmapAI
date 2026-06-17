@@ -42,6 +42,8 @@ export interface SubStage {
   sort_order: number
   is_done: boolean
   due_date: string | null
+  start_date: string | null
+  end_date: string | null
   note: string | null
   is_indicative: boolean
 }

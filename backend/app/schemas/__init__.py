@@ -34,6 +34,8 @@ class SubStageBase(BaseModel):
     sort_order: int = 0
     is_done: bool = False
     due_date: Date | None = None
+    start_date: Date | None = None
+    end_date: Date | None = None
     note: str | None = None
     is_indicative: bool = False
 
@@ -47,6 +49,8 @@ class SubStageUpdate(BaseModel):
     sort_order: int | None = None
     is_done: bool | None = None
     due_date: Date | None = None
+    start_date: Date | None = None
+    end_date: Date | None = None
     note: str | None = None
     is_indicative: bool | None = None
 

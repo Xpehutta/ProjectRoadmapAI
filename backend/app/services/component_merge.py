@@ -31,6 +31,8 @@ def component_stage_to_out(stage: ComponentSubStage) -> SubStageOut:
         sort_order=stage.sort_order,
         is_done=stage.is_done,
         due_date=stage.due_date,
+        start_date=stage.start_date,
+        end_date=stage.end_date,
         note=stage.note,
         is_indicative=stage.is_indicative,
     )
@@ -101,6 +103,8 @@ def copy_component_stages_to_task(db: Session, task: Task, component: ProjectCom
                 sort_order=stage.sort_order,
                 is_done=stage.is_done,
                 due_date=stage.due_date,
+                start_date=stage.start_date,
+                end_date=stage.end_date,
                 note=stage.note,
                 is_indicative=stage.is_indicative,
             )

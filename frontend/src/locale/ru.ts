@@ -77,6 +77,9 @@ export const ru = {
     priorityLabel: (p: number) => `P${p}`,
     shownCount: (shown: number, total: number) => `Показано ${shown} из ${total}`,
     emptyFilter: 'Нет задач для выбранных приоритетов',
+    stageCompleted: (name: string, start: string, end: string) =>
+      `Выполнен этап «${name}»: ${start} – ${end}`,
+    stageDateShift: (name: string) => `Этап «${name}» — сдвиг дат`,
   },
 
   status: {
@@ -255,6 +258,9 @@ export const ru = {
     unsaved: 'не сохранено',
     complete: (pct: number) => `${pct}% выполнено`,
     markAllDone: 'Отметить все выполненными',
+    stageDone: 'Выполнено',
+    stageShift: 'Сдвиг',
+    unmarkStage: 'Снять отметку',
     addStage: '+ Добавить этап',
     pickFromTemplate: 'Этап из шаблона',
     customStageOption: 'Свой этап…',
@@ -265,7 +271,14 @@ export const ru = {
     templateAlreadyOnTask: 'уже на задаче',
     stageName: 'Название этапа',
     stageNamePlaceholder: 'например, Разработка',
+    stageStartDate: 'Начало',
+    stageEndDate: 'Окончание',
     stageDueDate: 'Срок',
+    indicativeFromStages: 'Считается автоматически по датам этапов (мин. начало, макс. окончание)',
+    autoFillPrecedingEnd: (endDate: string, stageName: string) =>
+      `У этапа «${stageName}» не указано окончание. Установить окончание на ${endDate} (день перед началом следующего этапа)?`,
+    autoFillFollowingStart: (startDate: string, stageName: string) =>
+      `Не указано начало нового этапа. Установить начало на ${startDate} (день после окончания этапа «${stageName}»)?`,
     stageIndicative: 'Индикативный',
     addingStage: 'Добавление…',
     noStages: 'Нет этапов',
@@ -281,6 +294,39 @@ export const ru = {
     deleteTask: 'Удалить задачу',
     deleteTaskConfirm: (name: string) => `Удалить задачу «${name}»? Это действие нельзя отменить.`,
     deletingTask: 'Удаление…',
+  },
+
+  stageComplete: {
+    title: (name: string) => `Подтверждение выполнения: «${name}»`,
+    subtitle: 'Проверьте фактические даты начала и окончания этапа',
+    shiftHint: 'Даты изменены — сдвиг будет отображён на диаграмме Ганта, индикативные сроки обновятся при необходимости.',
+    comment: 'Комментарий к корректировке дат',
+    commentRequired: 'При изменении дат укажите комментарий',
+    commentPlaceholder: 'Почему изменили сроки этапа?',
+    confirm: 'Отметить выполненным',
+    cancel: 'Отмена',
+    submitting: 'Сохранение…',
+  },
+
+  stageShift: {
+    title: (name: string) => `Сдвиг этапа: «${name}»`,
+    subtitle: 'Укажите новые даты и комментарий. Сдвиг отобразится на диаграмме Ганта; индикативные сроки обновятся, если на них влияет изменение.',
+    comment: 'Комментарий к сдвигу',
+    commentRequired: 'Укажите комментарий к сдвигу',
+    commentPlaceholder: 'Почему перенесли сроки этапа?',
+    datesUnchanged: 'Измените хотя бы одну дату или отмените действие',
+    confirm: 'Сохранить сдвиг',
+    cancel: 'Отмена',
+    submitting: 'Сохранение…',
+  },
+
+  stageDateChange: {
+    title: (name: string) => `Изменение дат: «${name}»`,
+    message: 'Даты этапа изменены. Выберите, как сохранить изменение.',
+    cancel: 'Отменить изменение',
+    saveWithoutShift: 'Сохранить без сдвига',
+    saveWithShift: 'Сохранить изменение',
+    submitting: 'Сохранение…',
   },
 
   timeline: {

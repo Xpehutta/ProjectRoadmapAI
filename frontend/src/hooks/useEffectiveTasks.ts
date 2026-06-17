@@ -7,14 +7,27 @@ import {
   isTaskDisplayPending,
   resolveEffectivePatch,
 } from '../utils/taskPending'
+import { indicativeDatesFromStages } from '../utils/stageIndicative'
+
+function withIndicativeFromStages(task: Task, patch?: Record<string, unknown>): Task {
+  if (!task.sub_stages?.length) return task
+  const hasIndicativePending =
+    patch &&
+    ('indicative_start' in patch || 'indicative_end' in patch)
+  if (hasIndicativePending) return task
+  const { start, end } = indicativeDatesFromStages(task.sub_stages)
+  return { ...task, indicative_start: start, indicative_end: end }
+}
 
 export function useEffectiveTasks(tasks: Task[]): Task[] {
   const taskChanges = usePendingChangesStore((s) => s.taskChanges)
   return useMemo(() => {
     const componentPatches = buildComponentPendingPatches(tasks, taskChanges)
-    return tasks.map((t) =>
-      applyPendingToTask(t, resolveEffectivePatch(t, taskChanges, componentPatches))
-    )
+    return tasks.map((t) => {
+      const patch = resolveEffectivePatch(t, taskChanges, componentPatches)
+      const effective = applyPendingToTask(t, patch)
+      return withIndicativeFromStages(effective, patch)
+    })
   }, [tasks, taskChanges])
 }
 

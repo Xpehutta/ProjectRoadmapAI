@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ShiftCommentPopover } from './ShiftCommentPopover'
+import { GanttShiftArcSegment } from './GanttShiftArcSegment'
 import { useEffectiveTasks } from '../hooks/useEffectiveTasks'
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useSavedDateShiftsStore } from '../stores/savedDateShiftsStore'
@@ -25,8 +25,10 @@ import {
   parseDate,
   savedMilestoneShiftToDelta,
   savedTaskShiftToDateShift,
-  shiftArrowLineCoords,
 } from '../utils/dateShift'
+import { getCompletedStageBars } from '../utils/ganttStageBars'
+import { shiftArcLayer, shiftArcPositionForEdge } from '../utils/ganttShiftArc'
+import { savedStageShiftToBarShift } from '../utils/stageShift'
 
 function indicativeBarDates(start: Date | null, end: Date | null): { start: Date; end: Date } | null {
   if (start && end) return { start, end }
@@ -38,6 +40,8 @@ function indicativeBarDates(start: Date | null, end: Date | null): { start: Date
 const ROW_H = 44
 const LABEL_W = 220
 const HEADER_H = 48
+const STAGE_BAR_TOP = 28
+const STAGE_BAR_H = 10
 
 interface Props {
   project: ProjectDetail
@@ -65,6 +69,7 @@ export function GanttView({ project }: Props) {
   const pendingTasks = usePendingChangesStore((s) => s.taskChanges)
   const pendingMilestones = usePendingChangesStore((s) => s.milestones)
   const savedTaskShifts = useSavedDateShiftsStore((s) => s.taskShifts)
+  const savedStageShifts = useSavedDateShiftsStore((s) => s.stageShifts)
   const savedMilestoneShifts = useSavedDateShiftsStore((s) => s.milestoneShifts)
   const stageTaskDates = usePendingChangesStore((s) => s.stageTaskDates)
   const stageMilestone = usePendingChangesStore((s) => s.stageMilestone)
@@ -150,6 +155,9 @@ export function GanttView({ project }: Props) {
       ;[start, end, indStart, indEnd].forEach((d) => {
         if (d) dates.push(d)
       })
+      for (const stageBar of getCompletedStageBars(t.sub_stages ?? [])) {
+        dates.push(stageBar.start, stageBar.end)
+      }
       const change = pendingTasks[t.id]
       if (change?.original) {
         ;[change.original.start_date, change.original.end_date].forEach((d) => {
@@ -159,6 +167,13 @@ export function GanttView({ project }: Props) {
       }
       const savedList = savedTaskShifts[t.id] ?? []
       for (const saved of savedList) {
+        ;[saved.origStart, saved.origEnd, saved.curStart, saved.curEnd].forEach((d) => {
+          const p = parseDate(d)
+          if (p) dates.push(p)
+        })
+      }
+      const savedStageList = savedStageShifts[t.id] ?? []
+      for (const saved of savedStageList) {
         ;[saved.origStart, saved.origEnd, saved.curStart, saved.curEnd].forEach((d) => {
           const p = parseDate(d)
           if (p) dates.push(p)
@@ -238,7 +253,7 @@ export function GanttView({ project }: Props) {
 
     return { minDate: min, maxDate: max, dayWidth, rows, milestones: project.milestones }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, groupingMode, collapsedGroupKeys, filteredTasks, pendingTasks, pendingMilestones, savedTaskShifts, savedMilestoneShifts, dragPreview, msPreview])
+  }, [project, groupingMode, collapsedGroupKeys, filteredTasks, pendingTasks, pendingMilestones, savedTaskShifts, savedStageShifts, savedMilestoneShifts, dragPreview, msPreview])
 
   const chartW = daysBetween(minDate, maxDate) * dayWidth
   const chartH = rows.length * ROW_H + HEADER_H
@@ -472,12 +487,14 @@ export function GanttView({ project }: Props) {
           if (!segments.length) return null
 
           const layerOffset = (shiftIndex - (shifts.length - 1) / 2) * 10
+          const taskBarTop = rowY + 14
+          const taskBarBottom = rowY + 30
 
           return (
             <g key={`shift-${shiftIndex}`} opacity={shift.saved ? 0.7 : 1}>
               <rect
                 x={origX}
-                y={rowY + 14}
+                y={taskBarTop}
                 width={origBarW}
                 height={16}
                 fill="none"
@@ -491,21 +508,10 @@ export function GanttView({ project }: Props) {
                 const shiftedRight = segment.deltaDays > 0
                 const color = shiftedRight ? '#dc2626' : '#16a34a'
                 const markerId = shiftedRight ? 'arrow-red' : 'arrow-green'
-                const anchorX1 =
+                const fromX =
                   segment.edge === 'start' ? xForDate(segment.origPoint) : origEndX
-                const anchorX2 =
+                const toX =
                   segment.edge === 'start' ? xForDate(segment.curPoint) : newEndX
-                const { lineX1, lineX2 } = shiftArrowLineCoords(anchorX1, anchorX2, shiftedRight)
-                if (Math.abs(lineX2 - lineX1) < 2) return null
-
-                const arrowY =
-                  rowY +
-                  22 +
-                  layerOffset +
-                  (segments.length > 1 ? (i === 0 ? -4 : 4) : 0)
-                const midX = (lineX1 + lineX2) / 2
-                const hitX = Math.min(lineX1, lineX2) - 6
-                const hitW = Math.abs(lineX2 - lineX1) + 12
                 const commentSnippet = shift.comment?.trim()
                   ? shift.comment!.length > 40
                     ? `${shift.comment!.slice(0, 40).trim()}…`
@@ -513,73 +519,120 @@ export function GanttView({ project }: Props) {
                   : ''
 
                 return (
-                  <g key={`${segment.edge}-${i}`} className="shift-arrow-gantt">
-                    <line
-                      x1={lineX1}
-                      y1={arrowY}
-                      x2={lineX2}
-                      y2={arrowY}
-                      stroke={color}
-                      strokeWidth={shift.saved ? 2 : 3}
-                      markerEnd={`url(#${markerId})`}
-                      style={{ pointerEvents: 'none' }}
-                    />
-                    <rect
-                      x={hitX}
-                      y={arrowY - 14}
-                      width={hitW}
-                      height={28}
-                      fill="transparent"
-                      className={`shift-arrow-hit-area ${hasComment ? 'has-comment' : ''} ${isOpen ? 'open' : ''}`}
-                      style={{ cursor: 'pointer' }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleComment(shift.entityKey)
-                      }}
-                    />
-                    <text
-                      x={midX}
-                      y={arrowY - 6}
-                      textAnchor="middle"
-                      className={`shift-days-label ${hasComment ? 'has-comment' : ''}`}
-                      fill={color}
-                      style={{ pointerEvents: 'none' }}
-                    >
-                      {segment.deltaDays > 0 ? '+' : ''}
-                      {segment.deltaDays}d
-                      {hasComment ? ' 💬' : ''}
-                    </text>
-                    {showShiftComments && commentSnippet && i === 0 ? (
-                      <text
-                        x={midX}
-                        y={arrowY + 14}
-                        textAnchor="middle"
-                        className="shift-comment-gantt-label"
-                        fill="#64748b"
-                        style={{ pointerEvents: 'none' }}
-                      >
-                        {commentSnippet}
-                      </text>
-                    ) : null}
-                    {isOpen && i === 0 ? (
-                      <foreignObject
-                        x={Math.max(LABEL_W, midX - 110)}
-                        y={arrowY + (showShiftComments && commentSnippet ? 20 : 10)}
-                        width={220}
-                        height={140}
-                      >
-                        <div className="shift-comment-foreign-root">
-                          <ShiftCommentPopover
-                            label={ru.shift.dateShift(shift.entityLabel)}
-                            comment={shift.comment ?? ''}
-                            saved={shift.saved}
-                            onChange={shift.onCommentChange}
-                            onClose={() => setActiveShiftCommentKey(null)}
-                          />
-                        </div>
-                      </foreignObject>
-                    ) : null}
-                  </g>
+                  <GanttShiftArcSegment
+                    key={`${segment.edge}-${i}`}
+                    fromX={fromX}
+                    toX={toX}
+                    barTop={taskBarTop}
+                    barBottom={taskBarBottom}
+                    position={shiftArcPositionForEdge(segment.edge, 'task')}
+                    layer={shiftArcLayer(shiftIndex, i, segment.edge, 'task') + layerOffset / 14}
+                    color={color}
+                    markerId={markerId}
+                    strokeWidth={shift.saved ? 2 : 3}
+                    deltaDays={segment.deltaDays}
+                    saved={shift.saved}
+                    hasComment={hasComment}
+                    commentSnippet={i === 0 ? commentSnippet : undefined}
+                    showShiftComments={showShiftComments}
+                    isOpen={isOpen && i === 0}
+                    onToggleComment={() => toggleComment(shift.entityKey)}
+                    popoverLabel={ru.shift.dateShift(shift.entityLabel)}
+                    comment={shift.comment ?? ''}
+                    onCommentChange={shift.onCommentChange}
+                    onClosePopover={() => setActiveShiftCommentKey(null)}
+                    popoverX={Math.max(LABEL_W, (fromX + toX) / 2 - 110)}
+                  />
+                )
+              })}
+            </g>
+          )
+        })}
+      </g>
+    )
+  }
+
+  const renderStageDateShiftArrow = (task: Task, rowY: number) => {
+    const entries = savedStageShifts[task.id] ?? []
+    if (!entries.length) return null
+
+    const toggleComment = (key: string) => {
+      setActiveShiftCommentKey(activeShiftCommentKey === key ? null : key)
+    }
+
+    const stageBarTop = rowY + STAGE_BAR_TOP
+    const stageBarBottom = rowY + STAGE_BAR_TOP + STAGE_BAR_H
+
+    return (
+      <g className="date-shift-indicator stage-date-shift">
+        {entries.map((saved, shiftIndex) => {
+          const shift = savedStageShiftToBarShift(saved)
+          if (!shift) return null
+
+          const origX = xForDate(shift.origStart)
+          const origBarW = Math.max(daysBetween(shift.origStart, shift.origEnd) * dayWidth, 4)
+          const newX = xForDate(shift.curStart)
+          const newBarW = Math.max(daysBetween(shift.curStart, shift.curEnd) * dayWidth, 4)
+          const origEndX = origX + origBarW
+          const newEndX = newX + newBarW
+          const entityKey = `gantt-stage-${task.id}-${shift.stageId}-${shiftIndex}`
+          const isOpen = activeShiftCommentKey === entityKey
+          const hasComment = Boolean(shift.comment?.trim())
+          const layerOffset = (shiftIndex - (entries.length - 1) / 2) * 8
+
+          return (
+            <g key={entityKey}>
+              <rect
+                x={origX}
+                y={stageBarTop}
+                width={origBarW}
+                height={STAGE_BAR_H}
+                fill="none"
+                stroke="#94a3b8"
+                strokeWidth={1.5}
+                strokeDasharray="3 2"
+                rx={2}
+                style={{ pointerEvents: 'none' }}
+              />
+              {shift.segments.map((segment, i) => {
+                const shiftedRight = segment.deltaDays > 0
+                const color = shiftedRight ? '#dc2626' : '#16a34a'
+                const markerId = shiftedRight ? 'arrow-red' : 'arrow-green'
+                const fromX =
+                  segment.edge === 'start' ? xForDate(segment.origPoint) : origEndX
+                const toX =
+                  segment.edge === 'start' ? xForDate(segment.curPoint) : newEndX
+                const commentSnippet = shift.comment?.trim()
+                  ? shift.comment!.length > 36
+                    ? `${shift.comment!.slice(0, 36).trim()}…`
+                    : shift.comment
+                  : ''
+
+                return (
+                  <GanttShiftArcSegment
+                    key={`${segment.edge}-${i}`}
+                    className="shift-arrow-gantt stage-shift-arrow"
+                    fromX={fromX}
+                    toX={toX}
+                    barTop={stageBarTop}
+                    barBottom={stageBarBottom}
+                    position={shiftArcPositionForEdge(segment.edge, 'stage')}
+                    layer={shiftArcLayer(shiftIndex, i, segment.edge, 'stage') + layerOffset / 14}
+                    color={color}
+                    markerId={markerId}
+                    strokeWidth={2.5}
+                    deltaDays={segment.deltaDays}
+                    saved
+                    hasComment={hasComment}
+                    commentSnippet={i === 0 ? commentSnippet : undefined}
+                    showShiftComments={showShiftComments}
+                    isOpen={isOpen && i === 0}
+                    onToggleComment={() => toggleComment(entityKey)}
+                    popoverLabel={ru.gantt.stageDateShift(shift.stageName)}
+                    comment={shift.comment ?? ''}
+                    onClosePopover={() => setActiveShiftCommentKey(null)}
+                    popoverX={Math.max(LABEL_W, (fromX + toX) / 2 - 110)}
+                  />
                 )
               })}
             </g>
@@ -674,6 +727,9 @@ export function GanttView({ project }: Props) {
       setActiveShiftCommentKey(activeShiftCommentKey === key ? null : key)
     }
 
+    const msBarTop = HEADER_H - 4
+    const msBarBottom = HEADER_H + 20
+
     return (
       <g>
         {shifts.map((shift, shiftIndex) => {
@@ -682,10 +738,6 @@ export function GanttView({ project }: Props) {
           const markerId = shiftedRight ? 'arrow-red' : 'arrow-green'
           const xOrig = xForDate(shift.orig)
           const xNew = xForDate(shift.next)
-          const y = HEADER_H + 6 + (shiftIndex - (shifts.length - 1) / 2) * 8
-          const { lineX1, lineX2 } = shiftArrowLineCoords(xOrig, xNew, shiftedRight)
-          if (Math.abs(lineX2 - lineX1) < 2) return null
-          const midX = (lineX1 + lineX2) / 2
           const hasComment = Boolean(shift.comment?.trim())
           const isOpen = activeShiftCommentKey === shift.entityKey
           const commentSnippet = shift.comment?.trim()
@@ -693,6 +745,7 @@ export function GanttView({ project }: Props) {
               ? `${shift.comment!.slice(0, 40).trim()}…`
               : shift.comment
             : ''
+          const layerOffset = (shiftIndex - (shifts.length - 1) / 2) * 8
 
           return (
             <g key={`ms-shift-${shiftIndex}`} opacity={shift.saved ? 0.7 : 1}>
@@ -704,71 +757,29 @@ export function GanttView({ project }: Props) {
                 strokeDasharray="3 2"
                 style={{ pointerEvents: 'none' }}
               />
-              <line
-                x1={lineX1}
-                y1={y}
-                x2={lineX2}
-                y2={y}
-                stroke={color}
+              <GanttShiftArcSegment
+                fromX={xOrig}
+                toX={xNew}
+                barTop={msBarTop}
+                barBottom={msBarBottom}
+                position={shiftArcPositionForEdge('start', 'milestone')}
+                layer={shiftArcLayer(shiftIndex, 0, 'start', 'milestone') + layerOffset / 14}
+                color={color}
+                markerId={markerId}
                 strokeWidth={shift.saved ? 2 : 2.5}
-                markerEnd={`url(#${markerId})`}
-                style={{ pointerEvents: 'none' }}
+                deltaDays={shift.deltaDays}
+                saved={shift.saved}
+                hasComment={hasComment}
+                commentSnippet={commentSnippet}
+                showShiftComments={showShiftComments}
+                isOpen={isOpen}
+                onToggleComment={() => toggleComment(shift.entityKey)}
+                popoverLabel={ru.shift.milestoneShift(ms.name)}
+                comment={shift.comment ?? ''}
+                onCommentChange={shift.onCommentChange}
+                onClosePopover={() => setActiveShiftCommentKey(null)}
+                popoverX={Math.max(LABEL_W, (xOrig + xNew) / 2 - 110)}
               />
-              <rect
-                x={Math.min(lineX1, lineX2) - 6}
-                y={y - 14}
-                width={Math.abs(lineX2 - lineX1) + 12}
-                height={28}
-                fill="transparent"
-                className={`shift-arrow-hit-area ${hasComment ? 'has-comment' : ''}`}
-                style={{ cursor: 'pointer' }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  toggleComment(shift.entityKey)
-                }}
-              />
-              <text
-                x={midX}
-                y={y - 6}
-                textAnchor="middle"
-                className="shift-days-label"
-                fill={color}
-                style={{ pointerEvents: 'none' }}
-              >
-                {shift.deltaDays > 0 ? '+' : ''}
-                {shift.deltaDays}d
-                {hasComment ? ' 💬' : ''}
-              </text>
-              {showShiftComments && commentSnippet ? (
-                <text
-                  x={midX}
-                  y={y + 14}
-                  textAnchor="middle"
-                  className="shift-comment-gantt-label"
-                  fill="#64748b"
-                  style={{ pointerEvents: 'none' }}
-                >
-                  {commentSnippet}
-                </text>
-              ) : null}
-              {isOpen ? (
-                <foreignObject
-                  x={Math.max(LABEL_W, midX - 110)}
-                  y={y + (showShiftComments && commentSnippet ? 20 : 10)}
-                  width={220}
-                  height={140}
-                >
-                  <div className="shift-comment-foreign-root">
-                    <ShiftCommentPopover
-                      label={ru.shift.milestoneShift(ms.name)}
-                      comment={shift.comment ?? ''}
-                      saved={shift.saved}
-                      onChange={shift.onCommentChange}
-                      onClose={() => setActiveShiftCommentKey(null)}
-                    />
-                  </div>
-                </foreignObject>
-              ) : null}
             </g>
           )
         })}
@@ -793,11 +804,17 @@ export function GanttView({ project }: Props) {
     return rows
       .map((row, i) => {
         if (row.laneLabel || !row.task) return null
-        return renderDateShiftArrow(row.task, HEADER_H + i * ROW_H)
+        const rowY = HEADER_H + i * ROW_H
+        return (
+          <g key={`shifts-${row.task.id}`}>
+            {renderDateShiftArrow(row.task, rowY)}
+            {renderStageDateShiftArrow(row.task, rowY)}
+          </g>
+        )
       })
       .filter(Boolean)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, pendingTasks, savedTaskShifts, savedMilestoneShifts, dragPreview, drag, minDate, dayWidth, activeShiftCommentKey, showShiftComments, pendingMilestones])
+  }, [rows, pendingTasks, savedTaskShifts, savedStageShifts, savedMilestoneShifts, dragPreview, drag, minDate, dayWidth, activeShiftCommentKey, showShiftComments, pendingMilestones])
 
   return (
     <div className="gantt-view">
@@ -935,6 +952,7 @@ export function GanttView({ project }: Props) {
           const labelX = ganttShowPriority ? 34 : 8
 
           const indRange = showIndicative ? indicativeBarDates(indStart, indEnd) : null
+          const completedStageBars = getCompletedStageBars(effective.sub_stages ?? [])
 
           return (
             <g key={task.id}>
@@ -979,6 +997,34 @@ export function GanttView({ project }: Props) {
                   className="gantt-bar-indicative"
                 />
               )}
+              {completedStageBars.map((stageBar) => {
+                const range = indicativeBarDates(stageBar.start, stageBar.end)
+                if (!range) return null
+                return (
+                  <rect
+                    key={`stage-actual-${stageBar.id}`}
+                    x={xForDate(range.start)}
+                    y={y + 28}
+                    width={Math.max(daysBetween(range.start, range.end) * dayWidth, 4)}
+                    height={10}
+                    fill="#16a34a"
+                    fillOpacity={0.9}
+                    stroke="#15803d"
+                    strokeWidth={1}
+                    rx={2}
+                    className="gantt-bar-stage-actual"
+                    onClick={() => setSelectedTaskId(task.id)}
+                  >
+                    <title>
+                      {ru.gantt.stageCompleted(
+                        stageBar.name,
+                        fmtDate(range.start),
+                        fmtDate(range.end)
+                      )}
+                    </title>
+                  </rect>
+                )
+              })}
               {start && end && (
                 <g>
                   {ganttShowPriority && (

@@ -254,10 +254,14 @@ def create_component_from_row(db: Session, project_id: int, row: ParsedRow) -> P
                 sort_order=sort_order,
                 is_done=phase.is_done,
                 due_date=phase.due_date,
+                end_date=phase.due_date,
                 note=phase.note,
                 is_indicative=phase.is_indicative,
             )
         )
+    from app.services.stage_indicative import recompute_component_indicative_dates
+
+    recompute_component_indicative_dates(db, component)
     return component
 
 

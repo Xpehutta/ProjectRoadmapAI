@@ -449,6 +449,47 @@ body { margin: 0; }
   cursor: pointer;
 }
 
+.stage-complete-modal form label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+}
+
+.stage-complete-modal form label input,
+.stage-complete-modal form label textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.stage-date-change-actions {
+  flex-wrap: wrap;
+}
+
+.stage-date-change-actions .btn-save-quiet {
+  flex: 1 1 auto;
+  min-width: 140px;
+}
+
+.modal-actions button { margin-top: 0; }
+
+.form-error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin: 0 0 8px;
+}
+
 .gantt-view {
   display: flex;
   flex-direction: column;
@@ -824,6 +865,7 @@ body { margin: 0; }
 .kanban-schedule-bar { margin-top: 4px; }
 .release-schedule-bar { margin-top: 6px; }
 .gantt-bar-indicative { pointer-events: none; }
+.gantt-bar-stage-actual { cursor: pointer; pointer-events: all; }
 .progress-fill { height: 100%; border-radius: 3px; background: #2563eb; }
 
 .kanban-board {
@@ -982,6 +1024,25 @@ body { margin: 0; }
 .checklist li { padding: 4px 0; }
 .checklist .done { text-decoration: line-through; color: #16a34a; }
 .phase-checklist li { margin-bottom: 10px; }
+.phase-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.phase-title { font-size: 0.9rem; color: #1e293b; }
+.phase-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.phase-actions .btn-link {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 4px 0;
+  text-decoration: underline;
+}
+.stage-complete-shift-hint { margin: 0 0 8px; font-size: 0.8rem; }
 
 .add-stage-form {
   display: flex;
@@ -1019,10 +1080,20 @@ body { margin: 0; }
   align-items: center;
   gap: 8px !important;
 }
-.phase-meta { margin-left: 1.6rem; font-size: 0.8rem; color: #64748b; display: flex; flex-wrap: wrap; gap: 8px; }
+.phase-meta { margin-left: 1.6rem; font-size: 0.8rem; color: #64748b; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.phase-date-field { display: inline-flex; align-items: center; gap: 4px; }
+.phase-date-field span { white-space: nowrap; }
+.phase-date-field input[type="date"] {
+  font-size: 0.8rem;
+  padding: 2px 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  color: #1e293b;
+}
 .phase-date { font-variant-numeric: tabular-nums; color: #1e293b; }
 .phase-note { font-style: italic; }
 .indicative-phase .phase-date { color: #64748b; }
+.stage-indicative-hint { margin: 4px 0 0; font-size: 0.8rem; }
 .muted { color: #94a3b8; font-size: 0.85rem; }
 
 .comment-list, .history-list, .audit-list { max-height: 200px; overflow-y: auto; }

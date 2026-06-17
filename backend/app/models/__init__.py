@@ -166,6 +166,8 @@ class TaskSubStage(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_done: Mapped[bool] = mapped_column(Boolean, default=False)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_indicative: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -213,6 +215,8 @@ class ComponentSubStage(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_done: Mapped[bool] = mapped_column(Boolean, default=False)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_indicative: Mapped[bool] = mapped_column(Boolean, default=False)
 
