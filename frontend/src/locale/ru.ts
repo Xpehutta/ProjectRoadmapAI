@@ -294,6 +294,22 @@ export const ru = {
     deleteTask: 'Удалить задачу',
     deleteTaskConfirm: (name: string) => `Удалить задачу «${name}»? Это действие нельзя отменить.`,
     deletingTask: 'Удаление…',
+    tabs: {
+      general: 'Общая',
+      stages: 'Этапы',
+      contractor: 'Подрядчик',
+      effort: 'Трудозатраты',
+      other: 'Остальное',
+    },
+    taskDescription: 'Описание задачи',
+    showcase: 'Витрина',
+    contractorInfo: 'Информация по подрядчику',
+    attributeCount: 'Количество атрибутов',
+    tabComment: 'Комментарий',
+    showcaseDevelopmentRequired: 'Необходимость разработки Витрины',
+    factDates: 'Фактические сроки',
+    planning: 'Планирование и приоритизация',
+    taskNotes: 'Комментарий к задаче',
   },
 
   stageComplete: {

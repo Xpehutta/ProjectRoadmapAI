@@ -997,10 +997,57 @@ body { margin: 0; }
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-.task-drawer h2 { margin: 0; font-size: 1.1rem; }
+.task-drawer h2 { margin: 0; font-size: 1.1rem; flex: 1; line-height: 1.3; }
+.drawer-title-badge { margin-left: 6px; font-size: 0.65rem; vertical-align: middle; }
+
+.task-drawer-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.task-drawer-tabs button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 0.72rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.task-drawer-tabs button:hover { background: #f1f5f9; }
+.task-drawer-tabs button.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.task-drawer-tab-panel section:first-child h3 { margin-top: 0; }
+.drawer-tab-progress { margin-bottom: 12px; }
+.drawer-tab-comment {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+.drawer-checkbox-field {
+  margin: 8px 0 12px;
+  font-size: 0.85rem !important;
+  color: #334155 !important;
+}
+
+.task-drawer label input.readonly-field {
+  background: #f8fafc;
+  color: #64748b;
+  cursor: default;
+}
 .task-drawer h3 { font-size: 0.9rem; margin: 16px 0 8px; display: flex; justify-content: space-between; align-items: center; }
 .task-drawer label { display: block; font-size: 0.8rem; color: #64748b; margin-bottom: 8px; }
 .task-drawer label input, .task-drawer textarea {

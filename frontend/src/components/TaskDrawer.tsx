@@ -28,11 +28,28 @@ import {
   stageNeedsPrecedingEndFill,
 } from '../utils/subStageDates'
 import { indicativeRangeChanged, buildStageShiftEntry, stageDatesChanged, stagePlannedDates } from '../utils/stageComplete'
+import {
+  mergeTaskCustomFields,
+  SHOWCASE_DEVELOPMENT_KEY,
+  tabCustomComment,
+  TAB_COMMENT_KEYS,
+  isShowcaseDevelopmentRequired,
+} from '../utils/drawerTabFields'
 
 interface Props {
   project: ProjectDetail
   task: Task
 }
+
+type TaskDrawerTab = 'general' | 'stages' | 'contractor' | 'effort' | 'other'
+
+const DRAWER_TABS: { id: TaskDrawerTab; labelKey: keyof typeof ru.drawer.tabs }[] = [
+  { id: 'general', labelKey: 'general' },
+  { id: 'stages', labelKey: 'stages' },
+  { id: 'contractor', labelKey: 'contractor' },
+  { id: 'effort', labelKey: 'effort' },
+  { id: 'other', labelKey: 'other' },
+]
 
 export function TaskDrawer({ project, task }: Props) {
   const setSelectedTaskId = useUIStore((s) => s.setSelectedTaskId)
@@ -58,6 +75,7 @@ export function TaskDrawer({ project, task }: Props) {
   } | null>(null)
   const [shiftingStageSubmitting, setShiftingStageSubmitting] = useState(false)
   const [stageDateInputReset, setStageDateInputReset] = useState(0)
+  const [activeTab, setActiveTab] = useState<TaskDrawerTab>('general')
   const recordIndicativeShift = useSavedDateShiftsStore((s) => s.recordIndicativeShift)
   const recordStageShift = useSavedDateShiftsStore((s) => s.recordStageShift)
 
@@ -368,11 +386,52 @@ export function TaskDrawer({ project, task }: Props) {
     stage(field, value)
   }
 
+  const patchCustomField = (key: string, value: string) => {
+    const merged = mergeTaskCustomFields(task, pending?.patch)
+    stageTaskChange(task, { custom_fields: { ...merged, [key]: value } })
+  }
+
+  const renderTabComment = (
+    tab: 'general' | 'stages' | 'contractor' | 'effort' | 'other'
+  ) => {
+    if (tab === 'other') {
+      return (
+        <label className="drawer-tab-comment">
+          {ru.drawer.tabComment}
+          <textarea
+            key={`notes-${effective.notes}`}
+            defaultValue={effective.notes ?? ''}
+            rows={2}
+            onBlur={(e) => patch('notes', e.target.value || null)}
+          />
+        </label>
+      )
+    }
+    const key = TAB_COMMENT_KEYS[tab]
+    const value = tabCustomComment(effective, key)
+    return (
+      <label className="drawer-tab-comment">
+        {ru.drawer.tabComment}
+        <textarea
+          key={`${key}-${value}`}
+          defaultValue={value}
+          rows={2}
+          onBlur={(e) => patchCustomField(key, e.target.value)}
+        />
+      </label>
+    )
+  }
+
+  const indicativeFromStages = task.sub_stages.length > 0
+
   return (
     <>
     <aside className="task-drawer">
       <header>
-        <h2>{task.name}</h2>
+        <h2>
+          {effective.name}
+          {hasPending && <span className="pending-badge drawer-title-badge">{ru.drawer.unsaved}</span>}
+        </h2>
         <button className="close-btn" onClick={() => setSelectedTaskId(null)}>
           ×
         </button>
@@ -416,527 +475,591 @@ export function TaskDrawer({ project, task }: Props) {
         </section>
       )}
 
-      <section>
-        <h3>
-          Планирование {hasPending && <span className="pending-badge">{ru.drawer.unsaved}</span>}
-          <span className="score-badge has-score">
-            {formatScore(prioritizationScore(effective, prioritizationMethod), prioritizationMethod)}
-          </span>
-        </h3>
-        <label>
-          Приоритет
-          <input
-            type="number"
-            key={`pri-${effective.priority}`}
-            defaultValue={effective.priority ?? ''}
-            onBlur={(e) => patch('priority', e.target.value ? Number(e.target.value) : null)}
-          />
-        </label>
-        <label>
-          {ru.backlog.release}
-          <select
-            key={`rel-${effective.release_id}`}
-            defaultValue={effective.release_id ?? ''}
-            onChange={(e) => patch('release_id', e.target.value ? Number(e.target.value) : null)}
+      <nav className="task-drawer-tabs" aria-label="Разделы задачи">
+        {DRAWER_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={activeTab === tab.id ? 'active' : ''}
+            onClick={() => setActiveTab(tab.id)}
           >
-            <option value="">{ru.releases.unassigned}</option>
-            {(project.releases ?? []).map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {ru.backlog.goal}
-          <select
-            key={`goal-${effective.goal_id}`}
-            defaultValue={effective.goal_id ?? ''}
-            onChange={(e) => patch('goal_id', e.target.value ? Number(e.target.value) : null)}
-          >
-            <option value="">{ru.goals.none}</option>
-            {(project.goals ?? []).map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          MoSCoW
-          <select
-            key={`moscow-${effective.moscow}`}
-            defaultValue={effective.moscow ?? ''}
-            onChange={(e) => patch('moscow', (e.target.value || null) as Moscow | null)}
-          >
-            <option value="">—</option>
-            {MOSCOW_OPTIONS.map((m) => (
-              <option key={m} value={m}>
-                {ru.backlog.moscowLabels[m]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="drawer-scoring-grid">
-          <label>
-            RICE {ru.backlog.reach}
-            <input
-              type="number"
-              key={`reach-${effective.rice_reach}`}
-              defaultValue={effective.rice_reach ?? ''}
-              onBlur={(e) => patch('rice_reach', e.target.value ? Number(e.target.value) : null)}
-            />
-          </label>
-          <label>
-            RICE {ru.backlog.impact}
-            <input
-              type="number"
-              key={`impact-${effective.rice_impact}`}
-              defaultValue={effective.rice_impact ?? ''}
-              onBlur={(e) => patch('rice_impact', e.target.value ? Number(e.target.value) : null)}
-            />
-          </label>
-          <label>
-            RICE {ru.backlog.confidence}
-            <input
-              type="number"
-              key={`conf-${effective.rice_confidence}`}
-              defaultValue={effective.rice_confidence ?? ''}
-              onBlur={(e) => patch('rice_confidence', e.target.value ? Number(e.target.value) : null)}
-            />
-          </label>
-          <label>
-            RICE {ru.backlog.effort}
-            <input
-              type="number"
-              key={`eff-${effective.rice_effort}`}
-              defaultValue={effective.rice_effort ?? ''}
-              onBlur={(e) => patch('rice_effort', e.target.value ? Number(e.target.value) : null)}
-            />
-          </label>
-          <label>
-            {ru.backlog.value}
-            <input
-              type="number"
-              key={`val-${effective.value_score}`}
-              defaultValue={effective.value_score ?? ''}
-              onBlur={(e) => patch('value_score', e.target.value ? Number(e.target.value) : null)}
-            />
-          </label>
-          <label>
-            {ru.backlog.effort}
-            <input
-              type="number"
-              key={`ves-${effective.effort_score}`}
-              defaultValue={effective.effort_score ?? ''}
-              onBlur={(e) => patch('effort_score', e.target.value ? Number(e.target.value) : null)}
-            />
-          </label>
-        </div>
-      </section>
+            {ru.drawer.tabs[tab.labelKey]}
+          </button>
+        ))}
+      </nav>
 
-      <section>
-        <h3>Витрина</h3>
-        <label>
-          Субпродукт
-          <input
-            key={`sub-${effective.subproduct}`}
-            defaultValue={effective.subproduct ?? ''}
-            onBlur={(e) => patch('subproduct', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Источник
-          <input
-            key={`src-${effective.data_source}-${effective.component_name}`}
-            defaultValue={effective.component_name ?? effective.data_source ?? ''}
-            readOnly={Boolean(task.component_id)}
-            className={task.component_id ? 'readonly-field' : undefined}
-            onBlur={(e) => {
-              if (!task.component_id) patch('data_source', e.target.value || null)
-            }}
-          />
-        </label>
-        <label>
-          Формы
-          <input
-            key={`forms-${effective.forms}`}
-            defaultValue={effective.forms ?? ''}
-            onBlur={(e) => patch('forms', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Заказчик
-          <input
-            key={`cust-${effective.customer}`}
-            defaultValue={effective.customer ?? ''}
-            onBlur={(e) => patch('customer', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Площадка
-          <input
-            key={`plat-${effective.platform}`}
-            defaultValue={effective.platform ?? ''}
-            onBlur={(e) => patch('platform', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Область
-          <input
-            key={`area-${effective.area}`}
-            defaultValue={effective.area ?? ''}
-            onBlur={(e) => patch('area', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Подрядчик
-          <input
-            key={`con-${effective.contractor}`}
-            defaultValue={effective.contractor ?? ''}
-            onBlur={(e) => patch('contractor', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Желаемый срок
-          <input
-            key={`dq-${effective.desired_quarter}`}
-            defaultValue={effective.desired_quarter ?? ''}
-            onBlur={(e) => patch('desired_quarter', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Количество атрибутов
-          <input
-            key={`attr-${effective.attribute_count}`}
-            defaultValue={effective.attribute_count ?? ''}
-            onBlur={(e) => patch('attribute_count', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Начало (факт)
-          <input
-            type="date"
-            key={`start-${effective.start_date}`}
-            defaultValue={effective.start_date ?? ''}
-            onBlur={(e) =>
-              stageTaskChange(task, {
-                start_date: e.target.value || null,
-                end_date: effective.end_date,
-              })
-            }
-          />
-        </label>
-        <label>
-          Окончание (факт)
-          <input
-            type="date"
-            key={`end-${effective.end_date}`}
-            defaultValue={effective.end_date ?? ''}
-            onBlur={(e) =>
-              stageTaskChange(task, {
-                start_date: effective.start_date,
-                end_date: e.target.value || null,
-              })
-            }
-          />
-        </label>
-        {dateShifts.length > 0 && (
-          <div className="drawer-date-shift">
-            <DateShiftIndicator
-              shifts={dateShifts}
-              entityKey={`task-${task.id}`}
-              entityLabel={task.name}
-            />
-          </div>
-        )}
-        <PendingShiftComment taskId={task.id} taskName={task.name} />
-        <label>
-          Индикативное начало
-          <input
-            type="date"
-            key={`is-${effective.indicative_start}`}
-            defaultValue={effective.indicative_start ?? ''}
-            onBlur={(e) => patch('indicative_start', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Индикативное окончание
-          <input
-            type="date"
-            key={`ie-${effective.indicative_end}`}
-            defaultValue={effective.indicative_end ?? ''}
-            onBlur={(e) => patch('indicative_end', e.target.value || null)}
-          />
-        </label>
-        {task.sub_stages.length > 0 && (
-          <p className="muted stage-indicative-hint">{ru.drawer.indicativeFromStages}</p>
-        )}
-        <label>
-          {ru.drawer.plannedCost}
-          <input
-            key={`pc-${effective.planned_cost}`}
-            defaultValue={effective.planned_cost ?? ''}
-            onBlur={(e) => patch('planned_cost', e.target.value || null)}
-          />
-        </label>
-        <label>
-          {ru.drawer.actualCost}
-          <input
-            key={`ac-${effective.actual_cost}`}
-            defaultValue={effective.actual_cost ?? ''}
-            onBlur={(e) => patch('actual_cost', e.target.value || null)}
-          />
-        </label>
-        <label>
-          {ru.drawer.plannedEffort}
-          <input
-            key={`pe-${effective.planned_effort}`}
-            defaultValue={effective.planned_effort ?? ''}
-            onBlur={(e) => patch('planned_effort', e.target.value || null)}
-          />
-        </label>
-        <label>
-          {ru.drawer.actualEffort}
-          <input
-            key={`ae-${effective.actual_effort}`}
-            defaultValue={effective.actual_effort ?? ''}
-            onBlur={(e) => patch('actual_effort', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Риски
-          <textarea
-            key={`risks-${effective.risks}`}
-            defaultValue={effective.risks ?? ''}
-            rows={2}
-            onBlur={(e) => patch('risks', e.target.value || null)}
-          />
-        </label>
-        <label>
-          Комментарий
-          <textarea
-            key={`notes-${effective.notes}`}
-            defaultValue={effective.notes ?? ''}
-            rows={2}
-            onBlur={(e) => patch('notes', e.target.value || null)}
-          />
-        </label>
-        <div className="completion-display">
-          <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{ width: `${task.completion_pct}%` }}
-            />
-          </div>
-          <span>{ru.drawer.complete(task.completion_pct)}</span>
-        </div>
-      </section>
-
-      <section>
-        <h3>
-          Этапы
-          {task.sub_stages.length > 0 && (
-            <button className="btn-small" onClick={completeAll}>
-              {ru.drawer.markAllDone}
-            </button>
-          )}
-        </h3>
-        <ul className="checklist phase-checklist">
-          {orderedStages.map((s, stageIndex) => (
-            <li key={s.id} className={s.is_indicative ? 'indicative-phase' : ''}>
-              <div className="phase-row-header">
-                <span className={`phase-title ${s.is_done ? 'done' : ''}`}>
-                  {s.is_done ? '✓ ' : ''}
-                  {s.name}
-                </span>
-                <div className="phase-actions">
-                  {s.is_done ? (
-                    <button
-                      type="button"
-                      className="btn-link"
-                      onClick={() => void toggleStage(s)}
-                    >
-                      {ru.drawer.unmarkStage}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn-small"
-                      onClick={() => setCompletingStage(s)}
-                    >
-                      {ru.drawer.stageDone}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="btn-small btn-save-quiet"
-                    onClick={() => openStageShift(s, stageIndex)}
-                  >
-                    {ru.drawer.stageShift}
-                  </button>
-                </div>
-              </div>
-              <div className="phase-meta">
-                <label className="phase-date-field">
-                  <span>{ru.drawer.stageStartDate}</span>
-                  <input
-                    key={`${s.id}-start-${s.start_date}-${stageDateInputReset}`}
-                    type="date"
-                    defaultValue={s.start_date ?? ''}
-                    onBlur={(e) => handleStageDateBlur(s, 'start_date', e.target.value, stageIndex)}
-                  />
-                </label>
-                <label className="phase-date-field">
-                  <span>{ru.drawer.stageEndDate}</span>
-                  <input
-                    key={`${s.id}-end-${s.end_date ?? s.due_date}-${stageDateInputReset}`}
-                    type="date"
-                    defaultValue={s.end_date ?? s.due_date ?? ''}
-                    onBlur={(e) => handleStageDateBlur(s, 'end_date', e.target.value, stageIndex)}
-                  />
-                </label>
-                {s.note && s.note !== stageEffectiveEndDate(s) && (
-                  <span className="phase-note">{s.note}</span>
-                )}
-              </div>
-            </li>
-          ))}
-          {!task.sub_stages.length && <li className="muted">{ru.drawer.noStages}</li>}
-        </ul>
-        <form className="add-stage-form" onSubmit={addStage}>
-          <label>
-            {ru.drawer.pickFromTemplate}
-            <select
-              value={selectedTemplate}
-              onChange={(e) => handleTemplateSelect(e.target.value)}
-            >
-              <option value="">—</option>
-              {renderTemplateOptions(stageLibrary?.predefined, ru.drawer.templatePredefined)}
-              {renderTemplateOptions(stageLibrary?.custom, ru.drawer.templateCustom)}
-              {renderTemplateOptions(stageLibrary?.used, ru.drawer.templateUsed)}
-              <option value={CUSTOM_STAGE_VALUE}>{ru.drawer.customStageOption}</option>
-            </select>
-          </label>
-          {(selectedTemplate === CUSTOM_STAGE_VALUE || !selectedTemplate) && (
+      <div className="task-drawer-tab-panel">
+        {activeTab === 'general' && (
+          <section>
             <label>
-              {ru.drawer.stageName}
+              {ru.drawer.taskDescription}
               <input
-                value={newStageName}
-                onChange={(e) => setNewStageName(e.target.value)}
-                placeholder={ru.drawer.stageNamePlaceholder}
+                key={`name-${effective.name}`}
+                defaultValue={effective.name}
+                onBlur={(e) => {
+                  const value = e.target.value.trim()
+                  if (value && value !== task.name) patch('name', value)
+                }}
               />
             </label>
-          )}
-          {selectedTemplate === CUSTOM_STAGE_VALUE && (
-            <label className="toggle inline-toggle">
+            <label>
+              Приоритет
+              <input
+                type="number"
+                key={`pri-${effective.priority}`}
+                defaultValue={effective.priority ?? ''}
+                onBlur={(e) => patch('priority', e.target.value ? Number(e.target.value) : null)}
+              />
+            </label>
+            <label>
+              {ru.drawer.showcase}
+              <input
+                key={`sub-${effective.subproduct}`}
+                defaultValue={effective.subproduct ?? ''}
+                onBlur={(e) => patch('subproduct', e.target.value || null)}
+              />
+            </label>
+            <label>
+              Источник
+              <input
+                key={`src-${effective.data_source}-${effective.component_name}`}
+                defaultValue={effective.component_name ?? effective.data_source ?? ''}
+                readOnly={Boolean(task.component_id)}
+                className={task.component_id ? 'readonly-field' : undefined}
+                onBlur={(e) => {
+                  if (!task.component_id) patch('data_source', e.target.value || null)
+                }}
+              />
+            </label>
+            <label>
+              Формы
+              <input
+                key={`forms-${effective.forms}`}
+                defaultValue={effective.forms ?? ''}
+                onBlur={(e) => patch('forms', e.target.value || null)}
+              />
+            </label>
+            <label>
+              Заказчик
+              <input
+                key={`cust-${effective.customer}`}
+                defaultValue={effective.customer ?? ''}
+                onBlur={(e) => patch('customer', e.target.value || null)}
+              />
+            </label>
+            <label>
+              Площадка
+              <input
+                key={`plat-${effective.platform}`}
+                defaultValue={effective.platform ?? ''}
+                onBlur={(e) => patch('platform', e.target.value || null)}
+              />
+            </label>
+            <label>
+              Область
+              <input
+                key={`area-${effective.area}`}
+                defaultValue={effective.area ?? ''}
+                onBlur={(e) => patch('area', e.target.value || null)}
+              />
+            </label>
+            <label>
+              Желаемый срок
+              <input
+                key={`dq-${effective.desired_quarter}`}
+                defaultValue={effective.desired_quarter ?? ''}
+                onBlur={(e) => patch('desired_quarter', e.target.value || null)}
+              />
+            </label>
+            {renderTabComment('general')}
+          </section>
+        )}
+
+        {activeTab === 'stages' && (
+          <section>
+            <div className="completion-display drawer-tab-progress">
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${task.completion_pct}%` }} />
+              </div>
+              <span>{ru.drawer.complete(task.completion_pct)}</span>
+            </div>
+            <label>
+              Индикативное начало
+              <input
+                type="date"
+                key={`is-${effective.indicative_start}`}
+                defaultValue={effective.indicative_start ?? ''}
+                readOnly={indicativeFromStages}
+                className={indicativeFromStages ? 'readonly-field' : undefined}
+                onBlur={(e) => {
+                  if (!indicativeFromStages) patch('indicative_start', e.target.value || null)
+                }}
+              />
+            </label>
+            <label>
+              Индикативное окончание
+              <input
+                type="date"
+                key={`ie-${effective.indicative_end}`}
+                defaultValue={effective.indicative_end ?? ''}
+                readOnly={indicativeFromStages}
+                className={indicativeFromStages ? 'readonly-field' : undefined}
+                onBlur={(e) => {
+                  if (!indicativeFromStages) patch('indicative_end', e.target.value || null)
+                }}
+              />
+            </label>
+            {indicativeFromStages && (
+              <p className="muted stage-indicative-hint">{ru.drawer.indicativeFromStages}</p>
+            )}
+            <h3>
+              Этапы
+              {task.sub_stages.length > 0 && (
+                <button className="btn-small" onClick={completeAll}>
+                  {ru.drawer.markAllDone}
+                </button>
+              )}
+            </h3>
+            <ul className="checklist phase-checklist">
+              {orderedStages.map((s, stageIndex) => (
+                <li key={s.id} className={s.is_indicative ? 'indicative-phase' : ''}>
+                  <div className="phase-row-header">
+                    <span className={`phase-title ${s.is_done ? 'done' : ''}`}>
+                      {s.is_done ? '✓ ' : ''}
+                      {s.name}
+                    </span>
+                    <div className="phase-actions">
+                      {s.is_done ? (
+                        <button
+                          type="button"
+                          className="btn-link"
+                          onClick={() => void toggleStage(s)}
+                        >
+                          {ru.drawer.unmarkStage}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-small"
+                          onClick={() => setCompletingStage(s)}
+                        >
+                          {ru.drawer.stageDone}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn-small btn-save-quiet"
+                        onClick={() => openStageShift(s, stageIndex)}
+                      >
+                        {ru.drawer.stageShift}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="phase-meta">
+                    <label className="phase-date-field">
+                      <span>{ru.drawer.stageStartDate}</span>
+                      <input
+                        key={`${s.id}-start-${s.start_date}-${stageDateInputReset}`}
+                        type="date"
+                        defaultValue={s.start_date ?? ''}
+                        onBlur={(e) => handleStageDateBlur(s, 'start_date', e.target.value, stageIndex)}
+                      />
+                    </label>
+                    <label className="phase-date-field">
+                      <span>{ru.drawer.stageEndDate}</span>
+                      <input
+                        key={`${s.id}-end-${s.end_date ?? s.due_date}-${stageDateInputReset}`}
+                        type="date"
+                        defaultValue={s.end_date ?? s.due_date ?? ''}
+                        onBlur={(e) => handleStageDateBlur(s, 'end_date', e.target.value, stageIndex)}
+                      />
+                    </label>
+                    {s.note && s.note !== stageEffectiveEndDate(s) && (
+                      <span className="phase-note">{s.note}</span>
+                    )}
+                  </div>
+                </li>
+              ))}
+              {!task.sub_stages.length && <li className="muted">{ru.drawer.noStages}</li>}
+            </ul>
+            <form className="add-stage-form" onSubmit={addStage}>
+              <label>
+                {ru.drawer.pickFromTemplate}
+                <select
+                  value={selectedTemplate}
+                  onChange={(e) => handleTemplateSelect(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {renderTemplateOptions(stageLibrary?.predefined, ru.drawer.templatePredefined)}
+                  {renderTemplateOptions(stageLibrary?.custom, ru.drawer.templateCustom)}
+                  {renderTemplateOptions(stageLibrary?.used, ru.drawer.templateUsed)}
+                  <option value={CUSTOM_STAGE_VALUE}>{ru.drawer.customStageOption}</option>
+                </select>
+              </label>
+              {(selectedTemplate === CUSTOM_STAGE_VALUE || !selectedTemplate) && (
+                <label>
+                  {ru.drawer.stageName}
+                  <input
+                    value={newStageName}
+                    onChange={(e) => setNewStageName(e.target.value)}
+                    placeholder={ru.drawer.stageNamePlaceholder}
+                  />
+                </label>
+              )}
+              {selectedTemplate === CUSTOM_STAGE_VALUE && (
+                <label className="toggle inline-toggle">
+                  <input
+                    type="checkbox"
+                    checked={saveTemplateForReuse}
+                    onChange={(e) => setSaveTemplateForReuse(e.target.checked)}
+                  />
+                  {ru.drawer.saveForReuse}
+                </label>
+              )}
+              <label>
+                {ru.drawer.stageStartDate}
+                <input
+                  type="date"
+                  value={newStageStartDate}
+                  onChange={(e) => void handleNewStageStartChange(e.target.value)}
+                />
+              </label>
+              <label>
+                {ru.drawer.stageEndDate}
+                <input
+                  type="date"
+                  value={newStageEndDate}
+                  onChange={(e) => setNewStageEndDate(e.target.value)}
+                />
+              </label>
+              <label className="toggle inline-toggle">
+                <input
+                  type="checkbox"
+                  checked={newStageIndicative}
+                  onChange={(e) => setNewStageIndicative(e.target.checked)}
+                />
+                {ru.drawer.stageIndicative}
+              </label>
+              <button type="submit" className="btn-small" disabled={addingStage || !newStageName.trim()}>
+                {addingStage ? ru.drawer.addingStage : ru.drawer.addStage}
+              </button>
+            </form>
+            {renderTabComment('stages')}
+          </section>
+        )}
+
+        {activeTab === 'contractor' && (
+          <section>
+            <h3>{ru.drawer.contractorInfo}</h3>
+            <label>
+              Подрядчик
+              <input
+                key={`con-${effective.contractor}`}
+                defaultValue={effective.contractor ?? ''}
+                onBlur={(e) => patch('contractor', e.target.value || null)}
+              />
+            </label>
+            <label>
+              {ru.drawer.plannedCost}
+              <input
+                key={`pc-${effective.planned_cost}`}
+                defaultValue={effective.planned_cost ?? ''}
+                onBlur={(e) => patch('planned_cost', e.target.value || null)}
+              />
+            </label>
+            <label>
+              {ru.drawer.actualCost}
+              <input
+                key={`ac-${effective.actual_cost}`}
+                defaultValue={effective.actual_cost ?? ''}
+                onBlur={(e) => patch('actual_cost', e.target.value || null)}
+              />
+            </label>
+            {renderTabComment('contractor')}
+          </section>
+        )}
+
+        {activeTab === 'effort' && (
+          <section>
+            <label>
+              {ru.drawer.attributeCount}
+              <input
+                key={`attr-${effective.attribute_count}`}
+                defaultValue={effective.attribute_count ?? ''}
+                onBlur={(e) => patch('attribute_count', e.target.value || null)}
+              />
+            </label>
+            <label className="toggle inline-toggle drawer-checkbox-field">
               <input
                 type="checkbox"
-                checked={saveTemplateForReuse}
-                onChange={(e) => setSaveTemplateForReuse(e.target.checked)}
+                key={`showcase-dev-${isShowcaseDevelopmentRequired(effective)}`}
+                defaultChecked={isShowcaseDevelopmentRequired(effective)}
+                onChange={(e) =>
+                  patchCustomField(SHOWCASE_DEVELOPMENT_KEY, e.target.checked ? 'true' : 'false')
+                }
               />
-              {ru.drawer.saveForReuse}
+              {ru.drawer.showcaseDevelopmentRequired}
             </label>
-          )}
-          <label>
-            {ru.drawer.stageStartDate}
-            <input
-              type="date"
-              value={newStageStartDate}
-              onChange={(e) => void handleNewStageStartChange(e.target.value)}
-            />
-          </label>
-          <label>
-            {ru.drawer.stageEndDate}
-            <input
-              type="date"
-              value={newStageEndDate}
-              onChange={(e) => setNewStageEndDate(e.target.value)}
-            />
-          </label>
-          <label className="toggle inline-toggle">
-            <input
-              type="checkbox"
-              checked={newStageIndicative}
-              onChange={(e) => setNewStageIndicative(e.target.checked)}
-            />
-            {ru.drawer.stageIndicative}
-          </label>
-          <button type="submit" className="btn-small" disabled={addingStage || !newStageName.trim()}>
-            {addingStage ? ru.drawer.addingStage : ru.drawer.addStage}
-          </button>
-        </form>
-      </section>
+            <label>
+              {ru.drawer.plannedEffort}
+              <input
+                key={`pe-${effective.planned_effort}`}
+                defaultValue={effective.planned_effort ?? ''}
+                onBlur={(e) => patch('planned_effort', e.target.value || null)}
+              />
+            </label>
+            <label>
+              {ru.drawer.actualEffort}
+              <input
+                key={`ae-${effective.actual_effort}`}
+                defaultValue={effective.actual_effort ?? ''}
+                onBlur={(e) => patch('actual_effort', e.target.value || null)}
+              />
+            </label>
+            {renderTabComment('effort')}
+          </section>
+        )}
 
-      <section>
-        <h3>{ru.drawer.comments}</h3>
-        <div className="comment-list">
-          {comments.map((c) => (
-            <div key={c.id} className="comment">
-              <div className="comment-meta">
-                <strong>{c.user_name}</strong> · {formatLocaleDateTime(c.created_at)}
+        {activeTab === 'other' && (
+          <>
+            <section>
+              <h3>
+                {ru.drawer.planning}
+                <span className="score-badge has-score">
+                  {formatScore(prioritizationScore(effective, prioritizationMethod), prioritizationMethod)}
+                </span>
+              </h3>
+              <label>
+                {ru.backlog.release}
+                <select
+                  key={`rel-${effective.release_id}`}
+                  defaultValue={effective.release_id ?? ''}
+                  onChange={(e) => patch('release_id', e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">{ru.releases.unassigned}</option>
+                  {(project.releases ?? []).map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {ru.backlog.goal}
+                <select
+                  key={`goal-${effective.goal_id}`}
+                  defaultValue={effective.goal_id ?? ''}
+                  onChange={(e) => patch('goal_id', e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">{ru.goals.none}</option>
+                  {(project.goals ?? []).map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                MoSCoW
+                <select
+                  key={`moscow-${effective.moscow}`}
+                  defaultValue={effective.moscow ?? ''}
+                  onChange={(e) => patch('moscow', (e.target.value || null) as Moscow | null)}
+                >
+                  <option value="">—</option>
+                  {MOSCOW_OPTIONS.map((m) => (
+                    <option key={m} value={m}>
+                      {ru.backlog.moscowLabels[m]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="drawer-scoring-grid">
+                <label>
+                  RICE {ru.backlog.reach}
+                  <input
+                    type="number"
+                    key={`reach-${effective.rice_reach}`}
+                    defaultValue={effective.rice_reach ?? ''}
+                    onBlur={(e) => patch('rice_reach', e.target.value ? Number(e.target.value) : null)}
+                  />
+                </label>
+                <label>
+                  RICE {ru.backlog.impact}
+                  <input
+                    type="number"
+                    key={`impact-${effective.rice_impact}`}
+                    defaultValue={effective.rice_impact ?? ''}
+                    onBlur={(e) => patch('rice_impact', e.target.value ? Number(e.target.value) : null)}
+                  />
+                </label>
+                <label>
+                  RICE {ru.backlog.confidence}
+                  <input
+                    type="number"
+                    key={`conf-${effective.rice_confidence}`}
+                    defaultValue={effective.rice_confidence ?? ''}
+                    onBlur={(e) => patch('rice_confidence', e.target.value ? Number(e.target.value) : null)}
+                  />
+                </label>
+                <label>
+                  RICE {ru.backlog.effort}
+                  <input
+                    type="number"
+                    key={`eff-${effective.rice_effort}`}
+                    defaultValue={effective.rice_effort ?? ''}
+                    onBlur={(e) => patch('rice_effort', e.target.value ? Number(e.target.value) : null)}
+                  />
+                </label>
+                <label>
+                  {ru.backlog.value}
+                  <input
+                    type="number"
+                    key={`val-${effective.value_score}`}
+                    defaultValue={effective.value_score ?? ''}
+                    onBlur={(e) => patch('value_score', e.target.value ? Number(e.target.value) : null)}
+                  />
+                </label>
+                <label>
+                  {ru.backlog.effort}
+                  <input
+                    type="number"
+                    key={`ves-${effective.effort_score}`}
+                    defaultValue={effective.effort_score ?? ''}
+                    onBlur={(e) => patch('effort_score', e.target.value ? Number(e.target.value) : null)}
+                  />
+                </label>
               </div>
-              <p>{c.body}</p>
-            </div>
-          ))}
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (comment.trim()) addComment.mutate(comment.trim())
-          }}
-        >
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder={ru.drawer.commentPlaceholder}
-            rows={3}
-          />
-          <button type="submit">{ru.drawer.post}</button>
-        </form>
-      </section>
+            </section>
 
-      <section>
-        <h3>{ru.drawer.history}</h3>
-        <div className="filter-chips">
-          {HISTORY_FILTER_OPTIONS.map((f) => (
-            <button
-              key={f.id}
-              className={historyFilter === f.id ? 'active' : ''}
-              onClick={() => setHistoryFilter(f.id)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <div className="history-list">
-          {history.map((h) => (
-            <div key={h.id} className="history-item">
-              <div className="history-meta">
-                <span className="badge">{ru.audit.eventType[h.event_type]}</span>
-                <strong>{h.user_name}</strong> · {formatLocaleDateTime(h.created_at)}
-              </div>
-              {h.field && (
-                <p>
-                  <code>{h.field}</code>: {h.old_value ?? '—'} → {h.new_value ?? '—'}
-                </p>
+            <section>
+              <h3>{ru.drawer.factDates}</h3>
+              <label>
+                Начало (факт)
+                <input
+                  type="date"
+                  key={`start-${effective.start_date}`}
+                  defaultValue={effective.start_date ?? ''}
+                  onBlur={(e) =>
+                    stageTaskChange(task, {
+                      start_date: e.target.value || null,
+                      end_date: effective.end_date,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Окончание (факт)
+                <input
+                  type="date"
+                  key={`end-${effective.end_date}`}
+                  defaultValue={effective.end_date ?? ''}
+                  onBlur={(e) =>
+                    stageTaskChange(task, {
+                      start_date: effective.start_date,
+                      end_date: e.target.value || null,
+                    })
+                  }
+                />
+              </label>
+              {dateShifts.length > 0 && (
+                <div className="drawer-date-shift">
+                  <DateShiftIndicator
+                    shifts={dateShifts}
+                    entityKey={`task-${task.id}`}
+                    entityLabel={task.name}
+                  />
+                </div>
               )}
-            </div>
-          ))}
-          {!history.length && <p className="muted">{ru.drawer.noHistory}</p>}
-        </div>
-      </section>
+              <PendingShiftComment taskId={task.id} taskName={task.name} />
+            </section>
 
-      <section className="task-drawer-danger">
-        <button
-          type="button"
-          className="btn-danger btn-danger-block"
-          disabled={deleteTask.isPending}
-          onClick={handleDeleteTask}
-        >
-          {deleteTask.isPending ? ru.drawer.deletingTask : ru.drawer.deleteTask}
-        </button>
-      </section>
+            <section>
+              <label>
+                Риски
+                <textarea
+                  key={`risks-${effective.risks}`}
+                  defaultValue={effective.risks ?? ''}
+                  rows={2}
+                  onBlur={(e) => patch('risks', e.target.value || null)}
+                />
+              </label>
+            </section>
+
+            <section>
+              <h3>{ru.drawer.comments}</h3>
+              <div className="comment-list">
+                {comments.map((c) => (
+                  <div key={c.id} className="comment">
+                    <div className="comment-meta">
+                      <strong>{c.user_name}</strong> · {formatLocaleDateTime(c.created_at)}
+                    </div>
+                    <p>{c.body}</p>
+                  </div>
+                ))}
+              </div>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (comment.trim()) addComment.mutate(comment.trim())
+                }}
+              >
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder={ru.drawer.commentPlaceholder}
+                  rows={3}
+                />
+                <button type="submit">{ru.drawer.post}</button>
+              </form>
+            </section>
+
+            <section>
+              <h3>{ru.drawer.history}</h3>
+              <div className="filter-chips">
+                {HISTORY_FILTER_OPTIONS.map((f) => (
+                  <button
+                    key={f.id}
+                    className={historyFilter === f.id ? 'active' : ''}
+                    onClick={() => setHistoryFilter(f.id)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              <div className="history-list">
+                {history.map((h) => (
+                  <div key={h.id} className="history-item">
+                    <div className="history-meta">
+                      <span className="badge">{ru.audit.eventType[h.event_type]}</span>
+                      <strong>{h.user_name}</strong> · {formatLocaleDateTime(h.created_at)}
+                    </div>
+                    {h.field && (
+                      <p>
+                        <code>{h.field}</code>: {h.old_value ?? '—'} → {h.new_value ?? '—'}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {!history.length && <p className="muted">{ru.drawer.noHistory}</p>}
+              </div>
+            </section>
+
+            <section>{renderTabComment('other')}</section>
+
+            <section className="task-drawer-danger">
+              <button
+                type="button"
+                className="btn-danger btn-danger-block"
+                disabled={deleteTask.isPending}
+                onClick={handleDeleteTask}
+              >
+                {deleteTask.isPending ? ru.drawer.deletingTask : ru.drawer.deleteTask}
+              </button>
+            </section>
+          </>
+        )}
+      </div>
     </aside>
     {completingStage && (
       <StageCompleteModal
