@@ -307,6 +307,29 @@ export const ru = {
     attributeCount: 'Количество атрибутов',
     tabComment: 'Комментарий',
     showcaseDevelopmentRequired: 'Необходимость разработки Витрины',
+    effortCalculatorTitle: 'Калькулятор плановых трудозатрат',
+    effortCalculatorFormula:
+      'Формула (ч/д): [(атрибуты ÷ 2) × k_an + (атрибуты ÷ 2) × k_dev] × (1 + k_ma)',
+    effortCalculatorFormulaWithShowcase:
+      'Формула (ч/д): [(атрибуты ÷ 2) × k_an + (атрибуты ÷ 2) × k_dev] × [1 + k_ma + k_dm × (1 + k_ma)]',
+    effortKAn: 'k_an (аналитика)',
+    effortKDev: 'k_dev (разработка)',
+    effortKMa: 'k_ma (менеджмент)',
+    effortKDm: 'k_dm (витрина)',
+    effortCalculatorSuggested: (value: string) => `Предложение: ${value} ч/д`,
+    effortCalculatorBreakdown: (analytics: string, development: string, base: string, multiplier: string) =>
+      `Аналитика: ${analytics} ч/д · Разработка: ${development} ч/д · База: ${base} ч/д × ${multiplier}`,
+    effortCalculatorBreakdownWithShowcase: (
+      analytics: string,
+      development: string,
+      base: string,
+      kMa: string,
+      kDm: string,
+      multiplier: string
+    ) =>
+      `Аналитика: ${analytics} ч/д · Разработка: ${development} ч/д · База: ${base} ч/д × [1 + ${kMa} + ${kDm}×(1+${kMa})] = ${multiplier}`,
+    effortCalculatorApply: 'Подставить в плановые трудозатраты',
+    effortCalculatorNeedAttributes: 'Укажите количество атрибутов для расчёта.',
     factDates: 'Фактические сроки',
     planning: 'Планирование и приоритизация',
     taskNotes: 'Комментарий к задаче',

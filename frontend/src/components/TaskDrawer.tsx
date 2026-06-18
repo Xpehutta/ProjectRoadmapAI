@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { api } from '../api/client'
 import { DateShiftIndicator } from './DateShiftIndicator'
 import { PendingShiftComment } from './PendingShiftComment'
@@ -30,11 +30,22 @@ import {
 import { indicativeRangeChanged, buildStageShiftEntry, stageDatesChanged, stagePlannedDates } from '../utils/stageComplete'
 import {
   mergeTaskCustomFields,
+  readShowcaseDevelopmentRequired,
   SHOWCASE_DEVELOPMENT_KEY,
   tabCustomComment,
   TAB_COMMENT_KEYS,
-  isShowcaseDevelopmentRequired,
 } from '../utils/drawerTabFields'
+import {
+  DEFAULT_K_AN,
+  DEFAULT_K_DEV,
+  DEFAULT_K_DM,
+  DEFAULT_K_MA,
+  EFFORT_K_AN_KEY,
+  EFFORT_K_DEV_KEY,
+  EFFORT_K_DM_KEY,
+  EFFORT_K_MA_KEY,
+} from '../utils/effortCalculator'
+import { PlannedEffortCalculator } from './PlannedEffortCalculator'
 
 interface Props {
   project: ProjectDetail
@@ -76,6 +87,7 @@ export function TaskDrawer({ project, task }: Props) {
   const [shiftingStageSubmitting, setShiftingStageSubmitting] = useState(false)
   const [stageDateInputReset, setStageDateInputReset] = useState(0)
   const [activeTab, setActiveTab] = useState<TaskDrawerTab>('general')
+  const [plannedEffortInputKey, setPlannedEffortInputKey] = useState(0)
   const recordIndicativeShift = useSavedDateShiftsStore((s) => s.recordIndicativeShift)
   const recordStageShift = useSavedDateShiftsStore((s) => s.recordStageShift)
 
@@ -387,7 +399,8 @@ export function TaskDrawer({ project, task }: Props) {
   }
 
   const patchCustomField = (key: string, value: string) => {
-    const merged = mergeTaskCustomFields(task, pending?.patch)
+    const latestPending = usePendingChangesStore.getState().taskChanges[task.id]?.patch
+    const merged = mergeTaskCustomFields(task, latestPending)
     stageTaskChange(task, { custom_fields: { ...merged, [key]: value } })
   }
 
@@ -423,6 +436,18 @@ export function TaskDrawer({ project, task }: Props) {
   }
 
   const indicativeFromStages = task.sub_stages.length > 0
+  const effortKAn = effective.custom_fields?.[EFFORT_K_AN_KEY] ?? String(DEFAULT_K_AN)
+  const effortKDev = effective.custom_fields?.[EFFORT_K_DEV_KEY] ?? String(DEFAULT_K_DEV)
+  const effortKMa = effective.custom_fields?.[EFFORT_K_MA_KEY] ?? String(DEFAULT_K_MA)
+  const effortKDm = effective.custom_fields?.[EFFORT_K_DM_KEY] ?? String(DEFAULT_K_DM)
+  const showcaseFromEffective = readShowcaseDevelopmentRequired(
+    effective.custom_fields as Record<string, unknown> | null | undefined
+  )
+  const [showcaseDevRequired, setShowcaseDevRequired] = useState(showcaseFromEffective)
+
+  useEffect(() => {
+    setShowcaseDevRequired(showcaseFromEffective)
+  }, [task.id, showcaseFromEffective])
 
   return (
     <>
@@ -792,18 +817,37 @@ export function TaskDrawer({ project, task }: Props) {
             <label className="toggle inline-toggle drawer-checkbox-field">
               <input
                 type="checkbox"
-                key={`showcase-dev-${isShowcaseDevelopmentRequired(effective)}`}
-                defaultChecked={isShowcaseDevelopmentRequired(effective)}
-                onChange={(e) =>
-                  patchCustomField(SHOWCASE_DEVELOPMENT_KEY, e.target.checked ? 'true' : 'false')
-                }
+                checked={showcaseDevRequired}
+                onChange={(e) => {
+                  const checked = e.target.checked
+                  setShowcaseDevRequired(checked)
+                  patchCustomField(SHOWCASE_DEVELOPMENT_KEY, checked ? 'true' : 'false')
+                }}
               />
               {ru.drawer.showcaseDevelopmentRequired}
             </label>
+            <PlannedEffortCalculator
+              key={`effort-calc-${task.id}-${effortKAn}-${effortKDev}-${effortKMa}-${effortKDm}-${showcaseDevRequired}-${effective.attribute_count}`}
+              attributeCount={effective.attribute_count}
+              plannedEffort={effective.planned_effort}
+              showcaseDevelopmentRequired={showcaseDevRequired}
+              kAn={effortKAn}
+              kDev={effortKDev}
+              kMa={effortKMa}
+              kDm={effortKDm}
+              onKAnBlur={(value) => patchCustomField(EFFORT_K_AN_KEY, value)}
+              onKDevBlur={(value) => patchCustomField(EFFORT_K_DEV_KEY, value)}
+              onKMaBlur={(value) => patchCustomField(EFFORT_K_MA_KEY, value)}
+              onKDmBlur={(value) => patchCustomField(EFFORT_K_DM_KEY, value)}
+              onApply={(effort) => {
+                patch('planned_effort', effort)
+                setPlannedEffortInputKey((n) => n + 1)
+              }}
+            />
             <label>
               {ru.drawer.plannedEffort}
               <input
-                key={`pe-${effective.planned_effort}`}
+                key={`pe-${effective.planned_effort}-${plannedEffortInputKey}`}
                 defaultValue={effective.planned_effort ?? ''}
                 onBlur={(e) => patch('planned_effort', e.target.value || null)}
               />

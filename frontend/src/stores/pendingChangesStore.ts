@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Task } from '../types'
-import { taskEditSnapshot, valuesEqual } from '../utils/taskPending'
+import { taskEditSnapshot, valuesEqual, customFieldsEqual } from '../utils/taskPending'
 
 export interface PendingTaskChange {
   taskId: number
@@ -51,6 +51,12 @@ export const usePendingChangesStore = create<PendingChangesState>((set, get) => 
       const merged = { ...(prev?.patch ?? {}), ...fields }
       const cleaned: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(merged)) {
+        if (key === 'custom_fields') {
+          if (!customFieldsEqual(value, original[key])) {
+            cleaned[key] = value
+          }
+          continue
+        }
         if (!valuesEqual(value, original[key])) {
           cleaned[key] = value
         }

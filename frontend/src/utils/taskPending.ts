@@ -1,4 +1,7 @@
 import type { Task } from '../types'
+import { normalizeCustomFields } from './drawerTabFields'
+
+export { normalizeCustomFields, customFieldsEqual } from './drawerTabFields'
 
 /** Fields stored on shared components — kept in sync with backend SHARED_TASK_FIELDS */
 export const COMPONENT_SHARED_FIELDS = [
@@ -51,7 +54,9 @@ export function taskEditSnapshot(task: Task): Record<string, unknown> {
     risks: task.risks,
     notes: task.notes,
     extra_info: task.extra_info,
-    custom_fields: task.custom_fields ?? {},
+    custom_fields: normalizeCustomFields(
+      task.custom_fields as Record<string, unknown> | null | undefined
+    ),
     predecessor_refs: task.predecessors.map((p) => p.name).join(', '),
   }
 }
@@ -75,10 +80,10 @@ export function applyPendingToTask(
   if (!patch || Object.keys(patch).length === 0) return task
   const merged = { ...task, ...patch } as Task
   if (patch.custom_fields && typeof patch.custom_fields === 'object') {
-    merged.custom_fields = {
-      ...(task.custom_fields ?? {}),
-      ...(patch.custom_fields as Record<string, string>),
-    }
+    merged.custom_fields = normalizeCustomFields({
+      ...(task.custom_fields as Record<string, unknown> | null | undefined),
+      ...(patch.custom_fields as Record<string, unknown>),
+    })
   }
   if (typeof patch.predecessor_refs === 'string') {
     // display only; predecessors array stays until save

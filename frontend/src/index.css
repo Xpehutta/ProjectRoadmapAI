@@ -1043,6 +1043,64 @@ body { margin: 0; }
   color: #334155 !important;
 }
 
+.effort-calculator {
+  margin: 12px 0 16px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.effort-calculator h4 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  color: #334155;
+}
+.effort-calculator-formula {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.effort-calculator-coeffs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.effort-calculator-coeffs-three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.effort-calculator-coeffs-four {
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 420px) {
+  .effort-calculator-coeffs-three,
+  .effort-calculator-coeffs-four {
+    grid-template-columns: 1fr;
+  }
+}
+.effort-calculator-coeffs label {
+  margin-bottom: 0;
+}
+.effort-calculator-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.effort-calculator-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1e40af;
+}
+.effort-calculator-breakdown {
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.effort-calculator-hint {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
 .task-drawer label input.readonly-field {
   background: #f8fafc;
   color: #64748b;
