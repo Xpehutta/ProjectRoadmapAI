@@ -170,6 +170,7 @@ class TaskSubStage(Base):
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_indicative: Mapped[bool] = mapped_column(Boolean, default=False)
+    predecessor_stage_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     task: Mapped["Task"] = relationship(back_populates="sub_stages")
 
@@ -219,6 +220,7 @@ class ComponentSubStage(Base):
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_indicative: Mapped[bool] = mapped_column(Boolean, default=False)
+    predecessor_stage_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     component: Mapped["ProjectComponent"] = relationship(back_populates="sub_stages")
 

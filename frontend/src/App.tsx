@@ -24,7 +24,12 @@ import { ru } from './locale/ru'
 import type { Task } from './types'
 
 function App() {
-  const { data: projects = [], isLoading: loadingProjects } = useProjects()
+  const {
+    data: projects = [],
+    isLoading: loadingProjects,
+    isError: projectsError,
+    refetch: refetchProjects,
+  } = useProjects()
   const selectedProjectId = useUIStore((s) => s.selectedProjectId)
   const setSelectedProjectId = useUIStore((s) => s.setSelectedProjectId)
   const projectEntered = useUIStore((s) => s.projectEntered)
@@ -37,6 +42,7 @@ function App() {
   const createProject = useCreateProject()
   const importProject = useImportProject()
   const [importError, setImportError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [showCategories, setShowCategories] = useState(false)
   const [showComponents, setShowComponents] = useState(false)
   const [showReleases, setShowReleases] = useState(false)
@@ -68,7 +74,11 @@ function App() {
 
   useUnsavedChangesWarning()
 
-  if (loadingProjects || (activeProjectId && loadingProject && projectEntered)) {
+  if (loadingProjects && !projectsError) {
+    return <div className="loading">{ru.loading}</div>
+  }
+
+  if (projectEntered && activeProjectId && loadingProject) {
     return <div className="loading">{ru.loading}</div>
   }
 
@@ -81,16 +91,24 @@ function App() {
           selectedProject={activeProjectId ? project ?? null : null}
           selectedProjectId={activeProjectId ?? null}
           loadingProject={Boolean(activeProjectId && loadingProject)}
+          projectsError={projectsError}
+          createError={createError}
           creating={createProject.isPending}
           importing={importProject.isPending}
           importError={importError}
+          onRetryProjects={() => void refetchProjects()}
           onSelectProject={handleSelectProject}
           onCreateProject={(name, description) => {
+            setCreateError(null)
             createProject.mutate(
               { name, description: description || null },
               {
                 onSuccess: (created) => {
                   setSelectedProjectId(created.id)
+                  setCreateError(null)
+                },
+                onError: (err) => {
+                  setCreateError(err instanceof Error ? err.message : ru.startPage.createError)
                 },
               }
             )

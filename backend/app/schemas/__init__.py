@@ -2,7 +2,7 @@ from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import AuditEventType, DependencyType, Moscow, ReleaseStatus, TaskStatus
 
@@ -38,6 +38,12 @@ class SubStageBase(BaseModel):
     end_date: Date | None = None
     note: str | None = None
     is_indicative: bool = False
+    predecessor_stage_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("predecessor_stage_ids", mode="before")
+    @classmethod
+    def _default_predecessors(cls, value: list[int] | None) -> list[int]:
+        return value or []
 
 
 class SubStageCreate(SubStageBase):
@@ -53,6 +59,7 @@ class SubStageUpdate(BaseModel):
     end_date: Date | None = None
     note: str | None = None
     is_indicative: bool | None = None
+    predecessor_stage_ids: list[int] | None = None
 
 
 class SubStageOut(SubStageBase):

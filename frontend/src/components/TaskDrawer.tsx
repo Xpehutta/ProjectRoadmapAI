@@ -27,6 +27,12 @@ import {
   stageNeedsFollowingStartFill,
   stageNeedsPrecedingEndFill,
 } from '../utils/subStageDates'
+import {
+  formatStagePredecessorLabels,
+  formatStagePredecessorNumbers,
+  parseStagePredecessorNumbers,
+  stageDisplayNumber,
+} from '../utils/subStageDeps'
 import { indicativeRangeChanged, buildStageShiftEntry, stageDatesChanged, stagePlannedDates } from '../utils/stageComplete'
 import {
   mergeTaskCustomFields,
@@ -86,6 +92,8 @@ export function TaskDrawer({ project, task }: Props) {
   } | null>(null)
   const [shiftingStageSubmitting, setShiftingStageSubmitting] = useState(false)
   const [stageDateInputReset, setStageDateInputReset] = useState(0)
+  const [stagePredecessorReset, setStagePredecessorReset] = useState(0)
+  const [stagePredecessorError, setStagePredecessorError] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState<TaskDrawerTab>('general')
   const [plannedEffortInputKey, setPlannedEffortInputKey] = useState(0)
   const recordIndicativeShift = useSavedDateShiftsStore((s) => s.recordIndicativeShift)
@@ -347,6 +355,25 @@ export function TaskDrawer({ project, task }: Props) {
       start_date: field === 'start_date' ? rawValue || null : planned.start_date,
       end_date: field === 'end_date' ? rawValue || null : planned.end_date,
     })
+  }
+
+  const handleStagePredecessorsBlur = async (stageItem: SubStage, rawValue: string) => {
+    const saved = formatStagePredecessorNumbers(stageItem, orderedStages)
+    if (rawValue.trim() === saved) return
+
+    const ids = parseStagePredecessorNumbers(rawValue, orderedStages, stageItem.id)
+    if (ids === null) {
+      setStagePredecessorError(stageItem.id)
+      setStagePredecessorReset((n) => n + 1)
+      return
+    }
+
+    const current = stageItem.predecessor_stage_ids ?? []
+    if (ids.length === current.length && ids.every((id, i) => id === current[i])) return
+
+    setStagePredecessorError(null)
+    await api.updateSubStage(task.id, stageItem.id, { predecessor_stage_ids: ids })
+    await refreshProjectAfterSubStageChange(qc, project.id)
   }
 
   const addStage = async (e: FormEvent) => {
@@ -645,11 +672,13 @@ export function TaskDrawer({ project, task }: Props) {
                 </button>
               )}
             </h3>
+            <p className="muted stage-predecessors-hint">{ru.drawer.stagePredecessorsHint}</p>
             <ul className="checklist phase-checklist">
               {orderedStages.map((s, stageIndex) => (
                 <li key={s.id} className={s.is_indicative ? 'indicative-phase' : ''}>
                   <div className="phase-row-header">
                     <span className={`phase-title ${s.is_done ? 'done' : ''}`}>
+                      <span className="phase-number">{stageDisplayNumber(stageIndex)}.</span>
                       {s.is_done ? '✓ ' : ''}
                       {s.name}
                     </span>
@@ -701,6 +730,25 @@ export function TaskDrawer({ project, task }: Props) {
                     </label>
                     {s.note && s.note !== stageEffectiveEndDate(s) && (
                       <span className="phase-note">{s.note}</span>
+                    )}
+                    <label className="phase-date-field phase-predecessors-field">
+                      <span>{ru.drawer.stagePredecessors}</span>
+                      <input
+                        key={`${s.id}-pred-${(s.predecessor_stage_ids ?? []).join('-')}-${stagePredecessorReset}`}
+                        type="text"
+                        className={stagePredecessorError === s.id ? 'input-error' : undefined}
+                        defaultValue={formatStagePredecessorNumbers(s, orderedStages)}
+                        placeholder={ru.drawer.stagePredecessorsPlaceholder}
+                        onBlur={(e) => void handleStagePredecessorsBlur(s, e.target.value)}
+                      />
+                    </label>
+                    {(s.predecessor_stage_ids?.length ?? 0) > 0 && (
+                      <span className="phase-predecessors-label muted">
+                        {formatStagePredecessorLabels(s, orderedStages)}
+                      </span>
+                    )}
+                    {stagePredecessorError === s.id && (
+                      <span className="phase-predecessors-error">{ru.drawer.stagePredecessorsInvalid}</span>
                     )}
                   </div>
                 </li>

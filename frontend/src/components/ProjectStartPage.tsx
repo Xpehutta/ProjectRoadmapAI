@@ -19,12 +19,15 @@ interface Props {
   selectedProject: ProjectDetail | null
   selectedProjectId: number | null
   loadingProject?: boolean
+  projectsError?: boolean
+  createError?: string | null
   creating?: boolean
   importing?: boolean
   importError?: string | null
   onSelectProject: (id: number) => void
   onCreateProject: (name: string, description: string) => void
   onImportProject: (file: File, name: string, description: string) => void
+  onRetryProjects?: () => void
   onEnter: () => void
 }
 
@@ -33,12 +36,15 @@ export function ProjectStartPage({
   selectedProject,
   selectedProjectId,
   loadingProject,
+  projectsError,
+  createError,
   creating,
   importing,
   importError,
   onSelectProject,
   onCreateProject,
   onImportProject,
+  onRetryProjects,
   onEnter,
 }: Props) {
   const [showCreate, setShowCreate] = useState(projects.length === 0)
@@ -113,6 +119,17 @@ export function ProjectStartPage({
         <section className="start-page-card start-page-list-card">
           <p className="start-page-eyebrow">{ru.startPage.eyebrow}</p>
           <h1 className="start-page-heading">{ru.startPage.heading}</h1>
+
+          {projectsError && (
+            <div className="start-page-api-error" role="alert">
+              <p>{ru.startPage.apiError}</p>
+              {onRetryProjects && (
+                <button type="button" className="start-page-secondary inline" onClick={onRetryProjects}>
+                  {ru.startPage.retry}
+                </button>
+              )}
+            </div>
+          )}
 
           <div
             className={`start-page-dropzone ${dragOver ? 'drag-over' : ''} ${pendingFile ? 'has-file' : ''}`}
@@ -249,6 +266,7 @@ export function ProjectStartPage({
               <button type="submit" className="start-page-enter" disabled={creating || !name.trim()}>
                 {creating ? ru.startPage.creating : ru.startPage.create}
               </button>
+              {createError && <p className="start-page-import-error">{createError}</p>}
             </form>
           )}
         </section>

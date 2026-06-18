@@ -35,6 +35,7 @@ def component_stage_to_out(stage: ComponentSubStage) -> SubStageOut:
         end_date=stage.end_date,
         note=stage.note,
         is_indicative=stage.is_indicative,
+        predecessor_stage_ids=stage.predecessor_stage_ids or [],
     )
 
 
@@ -107,5 +108,6 @@ def copy_component_stages_to_task(db: Session, task: Task, component: ProjectCom
                 end_date=stage.end_date,
                 note=stage.note,
                 is_indicative=stage.is_indicative,
+                predecessor_stage_ids=stage.predecessor_stage_ids,
             )
         )

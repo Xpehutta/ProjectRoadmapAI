@@ -46,6 +46,7 @@ export interface SubStage {
   end_date: string | null
   note: string | null
   is_indicative: boolean
+  predecessor_stage_ids: number[]
 }
 
 export interface PredecessorRef {

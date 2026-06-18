@@ -328,6 +328,23 @@ body { margin: 0; }
   color: #dc2626;
 }
 
+.start-page-api-error {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.start-page-api-error p {
+  margin: 0;
+}
+
 .link-btn {
   border: none;
   background: none;
@@ -866,6 +883,29 @@ body { margin: 0; }
 .release-schedule-bar { margin-top: 6px; }
 .gantt-bar-indicative { pointer-events: none; }
 .gantt-bar-stage-actual { cursor: pointer; pointer-events: all; }
+
+.stage-dep-arrow {
+  pointer-events: stroke;
+  cursor: default;
+}
+
+.gantt-expand-toggle {
+  font-size: 12px;
+  cursor: pointer;
+  fill: #64748b;
+  user-select: none;
+}
+
+.gantt-stage-label {
+  font-size: 11px;
+  fill: #475569;
+  cursor: pointer;
+}
+
+.gantt-bar-stage {
+  cursor: pointer;
+  pointer-events: all;
+}
 .progress-fill { height: 100%; border-radius: 3px; background: #2563eb; }
 
 .kanban-board {
@@ -1137,6 +1177,26 @@ body { margin: 0; }
   flex-wrap: wrap;
 }
 .phase-title { font-size: 0.9rem; color: #1e293b; }
+.phase-number {
+  display: inline-block;
+  min-width: 1.4rem;
+  margin-right: 4px;
+  font-weight: 600;
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+}
+.phase-predecessors-field { width: 100%; flex-basis: 100%; }
+.phase-predecessors-field input[type="text"] {
+  font-size: 0.8rem;
+  padding: 2px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  min-width: 120px;
+}
+.phase-predecessors-field input.input-error { border-color: #dc2626; }
+.phase-predecessors-label { width: 100%; flex-basis: 100%; font-size: 0.75rem; }
+.phase-predecessors-error { width: 100%; flex-basis: 100%; color: #dc2626; font-size: 0.75rem; }
+.stage-predecessors-hint { margin: 0 0 8px; font-size: 0.78rem; }
 .phase-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .phase-actions .btn-link {
   background: none;

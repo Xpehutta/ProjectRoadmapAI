@@ -16,6 +16,7 @@ interface UIState {
   showAuditModal: boolean
   ganttShowPriority: boolean
   ganttPriorityFilter: (number | 'none')[] | null
+  ganttExpandedTaskIds: number[]
   setUserName: (name: string) => void
   setSelectedProjectId: (id: number | null) => void
   enterProject: () => void
@@ -32,6 +33,8 @@ interface UIState {
   setShowAuditModal: (show: boolean) => void
   setGanttShowPriority: (show: boolean) => void
   setGanttPriorityFilter: (filter: (number | 'none')[] | null) => void
+  toggleGanttTaskExpanded: (taskId: number) => void
+  isGanttTaskExpanded: (taskId: number) => boolean
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -54,6 +57,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   showAuditModal: false,
   ganttShowPriority: true,
   ganttPriorityFilter: null,
+  ganttExpandedTaskIds: [],
   setUserName: (name) => set({ userName: name }),
   setSelectedProjectId: (id) => {
     if (id) localStorage.setItem('roadmap-selected-project-id', String(id))
@@ -86,4 +90,12 @@ export const useUIStore = create<UIState>((set, get) => ({
   setShowAuditModal: (show) => set({ showAuditModal: show }),
   setGanttShowPriority: (show) => set({ ganttShowPriority: show }),
   setGanttPriorityFilter: (filter) => set({ ganttPriorityFilter: filter }),
+  toggleGanttTaskExpanded: (taskId) =>
+    set((s) => {
+      const next = new Set(s.ganttExpandedTaskIds)
+      if (next.has(taskId)) next.delete(taskId)
+      else next.add(taskId)
+      return { ganttExpandedTaskIds: [...next] }
+    }),
+  isGanttTaskExpanded: (taskId) => get().ganttExpandedTaskIds.includes(taskId),
 }))

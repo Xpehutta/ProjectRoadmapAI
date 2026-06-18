@@ -29,6 +29,9 @@ export const ru = {
     selected: 'Выбранный проект',
     selectHint: 'Выберите проект или создайте новый.',
     open: 'Открыть проект',
+    apiError: 'Не удалось связаться с сервером. Проверьте, что backend запущен (docker compose up), и обновите страницу.',
+    createError: 'Не удалось создать проект',
+    retry: 'Повторить',
     stats: {
       tasks: 'Задачи',
       categories: 'Категории',
@@ -80,6 +83,11 @@ export const ru = {
     stageCompleted: (name: string, start: string, end: string) =>
       `Выполнен этап «${name}»: ${start} – ${end}`,
     stageDateShift: (name: string) => `Этап «${name}» — сдвиг дат`,
+    stageDependency: (predNum: number, predName: string, succNum: number, succName: string) =>
+      `Этап ${succNum}. «${succName}» зависит от этапа ${predNum}. «${predName}»`,
+    expandStages: 'Развернуть этапы',
+    collapseStages: 'Свернуть этапы',
+    stageRowLabel: (num: number, name: string) => `${num}. ${name}`,
   },
 
   status: {
@@ -273,6 +281,10 @@ export const ru = {
     stageNamePlaceholder: 'например, Разработка',
     stageStartDate: 'Начало',
     stageEndDate: 'Окончание',
+    stagePredecessors: 'Предшественники',
+    stagePredecessorsPlaceholder: 'номера этапов через запятую, напр. 1, 2',
+    stagePredecessorsHint: 'Этап начнётся после завершения указанных этапов (по номеру в списке).',
+    stagePredecessorsInvalid: 'Укажите номера этапов через запятую (например: 1, 2)',
     stageDueDate: 'Срок',
     indicativeFromStages: 'Считается автоматически по датам этапов (мин. начало, макс. окончание)',
     autoFillPrecedingEnd: (endDate: string, stageName: string) =>

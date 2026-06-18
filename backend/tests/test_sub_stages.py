@@ -172,3 +172,27 @@ def test_actual_dates_set_when_stage_marked_done(client):
     assert task.start_date == date(2024, 3, 1)
     assert task.end_date == date(2024, 3, 15)
     assert task.duration_days == 15
+
+
+def test_sub_stage_predecessor_ids(client):
+    test_client, session, task = client
+    first = test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={"name": "Этап 1", "sort_order": 0},
+    ).json()
+    second = test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={"name": "Этап 2", "sort_order": 1},
+    ).json()
+    response = test_client.patch(
+        f"/api/tasks/{task.id}/sub-stages/{second['id']}",
+        json={"predecessor_stage_ids": [first["id"]]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["predecessor_stage_ids"] == [first["id"]]
+
+    bad = test_client.patch(
+        f"/api/tasks/{task.id}/sub-stages/{second['id']}",
+        json={"predecessor_stage_ids": [99999]},
+    )
+    assert bad.status_code == 400

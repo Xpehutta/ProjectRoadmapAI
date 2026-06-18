@@ -4,8 +4,8 @@ import { useEffectiveTasks } from '../hooks/useEffectiveTasks'
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useSavedDateShiftsStore } from '../stores/savedDateShiftsStore'
 import { useUIStore } from '../stores/uiStore'
-import type { Category, ProjectDetail, Task } from '../types'
-import { buildTaskGroups, getGroupDateRange, type GroupDateRanges } from '../utils/taskGroups'
+import type { ProjectDetail, Task } from '../types'
+import { buildTaskGroups, getGroupDateRange } from '../utils/taskGroups'
 import {
   collectPriorityKeys,
   filterTasksByPriority,
@@ -26,8 +26,26 @@ import {
   savedMilestoneShiftToDelta,
   savedTaskShiftToDateShift,
 } from '../utils/dateShift'
-import { getCompletedStageBars } from '../utils/ganttStageBars'
+import {
+  buildGanttRows,
+  chartHeightFromLayouts,
+  computeGanttRowLayouts,
+  GANTT_HEADER_H,
+  GANTT_STAGE_BAR_H,
+  GANTT_STAGE_ROW_BAR_TOP,
+  GANTT_STAGE_ROW_H,
+  GANTT_TASK_ROW_STAGE_BAR_TOP,
+  taskHasGanttStages,
+  type GanttRowLayout,
+} from '../utils/ganttRows'
+import {
+  collectStageDependencyLinks,
+  getStageBarRange,
+  stageDependencyFromX,
+  stageDependencyToX,
+} from '../utils/ganttStageDeps'
 import { shiftArcLayer, shiftArcPositionForEdge } from '../utils/ganttShiftArc'
+import { stageDisplayNumber } from '../utils/subStageDeps'
 import { savedStageShiftToBarShift } from '../utils/stageShift'
 
 function indicativeBarDates(start: Date | null, end: Date | null): { start: Date; end: Date } | null {
@@ -37,11 +55,10 @@ function indicativeBarDates(start: Date | null, end: Date | null): { start: Date
   return null
 }
 
-const ROW_H = 44
 const LABEL_W = 220
-const HEADER_H = 48
-const STAGE_BAR_TOP = 28
-const STAGE_BAR_H = 10
+const HEADER_H = GANTT_HEADER_H
+const STAGE_BAR_TOP = GANTT_TASK_ROW_STAGE_BAR_TOP
+const STAGE_BAR_H = GANTT_STAGE_BAR_H
 
 interface Props {
   project: ProjectDetail
@@ -66,6 +83,9 @@ export function GanttView({ project }: Props) {
   const setGanttShowPriority = useUIStore((s) => s.setGanttShowPriority)
   const ganttPriorityFilter = useUIStore((s) => s.ganttPriorityFilter)
   const setGanttPriorityFilter = useUIStore((s) => s.setGanttPriorityFilter)
+  const ganttExpandedTaskIds = useUIStore((s) => s.ganttExpandedTaskIds)
+  const toggleGanttTaskExpanded = useUIStore((s) => s.toggleGanttTaskExpanded)
+  const isGanttTaskExpanded = useUIStore((s) => s.isGanttTaskExpanded)
   const pendingTasks = usePendingChangesStore((s) => s.taskChanges)
   const pendingMilestones = usePendingChangesStore((s) => s.milestones)
   const savedTaskShifts = useSavedDateShiftsStore((s) => s.taskShifts)
@@ -147,7 +167,7 @@ export function GanttView({ project }: Props) {
     }
   }
 
-  const { minDate, maxDate, dayWidth, rows, milestones } = useMemo(() => {
+  const { minDate, maxDate, dayWidth, ganttRows, milestones } = useMemo(() => {
     const dates: Date[] = []
     filteredTasks.forEach((t) => {
       const { start, end } = getTaskDates(t)
@@ -155,8 +175,9 @@ export function GanttView({ project }: Props) {
       ;[start, end, indStart, indEnd].forEach((d) => {
         if (d) dates.push(d)
       })
-      for (const stageBar of getCompletedStageBars(t.sub_stages ?? [])) {
-        dates.push(stageBar.start, stageBar.end)
+      for (const stage of t.sub_stages ?? []) {
+        const range = getStageBarRange(stage)
+        if (range) dates.push(range.start, range.end)
       }
       const change = pendingTasks[t.id]
       if (change?.original) {
@@ -204,72 +225,41 @@ export function GanttView({ project }: Props) {
     const max = addDays(new Date(Math.max(...dates.map((d) => d.getTime()))), 14)
     const dayWidth = 18
 
-    const catMap = new Map(project.categories.map((c) => [c.id, c]))
-    const groups = buildTaskGroups(filteredTasks, project.categories, groupingMode).filter(
-      (g) => g.tasks.length > 0
-    )
+    const ganttRows = buildGanttRows({
+      tasks: filteredTasks,
+      categories: project.categories,
+      groupingMode,
+      collapsedGroupKeys,
+      expandedTaskIds: ganttExpandedTaskIds,
+      buildGroups: (tasks, categories, mode) => buildTaskGroups(tasks, categories, mode),
+      getGroupDateRanges: (tasks) => ({
+        actual: getGroupDateRange(tasks, (t) => getTaskDates(t)),
+        indicative: getGroupDateRange(tasks, (t) => getTaskIndicativeDates(t)),
+      }),
+    })
 
-    const rows: {
-      task?: Task
-      category?: Category
-      laneLabel?: string
-      groupKey?: string
-      groupColor?: string
-      taskCount?: number
-      groupDateRanges?: GroupDateRanges
-    }[] = []
-
-    for (const g of groups) {
-      if (groupingMode === 'swimlane') {
-        if (!g.tasks.length) continue
-        const groupDateRanges: GroupDateRanges = {
-          actual: getGroupDateRange(g.tasks, (t) => getTaskDates(t)),
-          indicative: getGroupDateRange(g.tasks, (t) => getTaskIndicativeDates(t)),
-        }
-        rows.push({
-          laneLabel: g.label,
-          groupKey: g.key,
-          groupColor: g.color,
-          taskCount: g.tasks.length,
-          groupDateRanges,
-        })
-        if (!collapsedGroupKeys.includes(g.key)) {
-          for (const t of g.tasks) {
-            rows.push({
-              task: t,
-              category: t.category_id ? catMap.get(t.category_id) : undefined,
-            })
-          }
-        }
-      } else {
-        for (const t of g.tasks) {
-          rows.push({
-            task: t,
-            category: t.category_id ? catMap.get(t.category_id) : undefined,
-          })
-        }
-      }
-    }
-
-    return { minDate: min, maxDate: max, dayWidth, rows, milestones: project.milestones }
+    return { minDate: min, maxDate: max, dayWidth, ganttRows, milestones: project.milestones }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, groupingMode, collapsedGroupKeys, filteredTasks, pendingTasks, pendingMilestones, savedTaskShifts, savedStageShifts, savedMilestoneShifts, dragPreview, msPreview])
+  }, [project, groupingMode, collapsedGroupKeys, ganttExpandedTaskIds, filteredTasks, pendingTasks, pendingMilestones, savedTaskShifts, savedStageShifts, savedMilestoneShifts, dragPreview, msPreview])
+
+  const rowLayouts = useMemo(() => computeGanttRowLayouts(ganttRows), [ganttRows])
 
   const chartW = daysBetween(minDate, maxDate) * dayWidth
-  const chartH = rows.length * ROW_H + HEADER_H
+  const chartH = chartHeightFromLayouts(rowLayouts)
 
   const xForDate = (d: Date) => daysBetween(minDate, d) * dayWidth + LABEL_W
 
   const depLines = useMemo(() => {
-    const taskIndex = new Map<number, number>()
-    rows.forEach((r, i) => {
-      if (r.task?.id) taskIndex.set(r.task.id, i)
-    })
+    const taskLayoutById = new Map<number, GanttRowLayout>()
+    for (const layout of rowLayouts) {
+      if (layout.row.kind === 'task') taskLayoutById.set(layout.row.task.id, layout)
+    }
+
     return project.dependencies
       .map((dep) => {
-        const predIdx = taskIndex.get(dep.predecessor_id)
-        const succIdx = taskIndex.get(dep.successor_id)
-        if (predIdx === undefined || succIdx === undefined) return null
+        const predLayout = taskLayoutById.get(dep.predecessor_id)
+        const succLayout = taskLayoutById.get(dep.successor_id)
+        if (!predLayout || !succLayout) return null
         const pred = effectiveById.get(dep.predecessor_id)
         const succ = effectiveById.get(dep.successor_id)
         if (!pred || !succ) return null
@@ -277,14 +267,14 @@ export function GanttView({ project }: Props) {
         const succDates = getTaskDates(succ)
         if (!predDates.end || !succDates.start) return null
         const x1 = xForDate(predDates.end)
-        const y1 = HEADER_H + predIdx * ROW_H + ROW_H / 2
+        const y1 = predLayout.y + predLayout.h / 2
         const x2 = xForDate(succDates.start)
-        const y2 = HEADER_H + succIdx * ROW_H + ROW_H / 2
+        const y2 = succLayout.y + succLayout.h / 2
         return { id: dep.id, x1, y1, x2, y2 }
       })
       .filter(Boolean) as { id: number; x1: number; y1: number; x2: number; y2: number }[]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, rows, minDate, dayWidth, pendingTasks, dragPreview, effectiveById])
+  }, [project, rowLayouts, minDate, dayWidth, pendingTasks, dragPreview, effectiveById])
 
   const finishTaskDrag = (clientX: number) => {
     if (!drag) return
@@ -552,16 +542,24 @@ export function GanttView({ project }: Props) {
     )
   }
 
-  const renderStageDateShiftArrow = (task: Task, rowY: number) => {
-    const entries = savedStageShifts[task.id] ?? []
+  const renderStageDateShiftArrow = (
+    task: Task,
+    rowY: number,
+    rowH: number,
+    stageId?: number
+  ) => {
+    const entries = (savedStageShifts[task.id] ?? []).filter(
+      (saved) => stageId == null || saved.stageId === stageId
+    )
     if (!entries.length) return null
 
     const toggleComment = (key: string) => {
       setActiveShiftCommentKey(activeShiftCommentKey === key ? null : key)
     }
 
-    const stageBarTop = rowY + STAGE_BAR_TOP
-    const stageBarBottom = rowY + STAGE_BAR_TOP + STAGE_BAR_H
+    const barTopOffset = rowH === GANTT_STAGE_ROW_H ? GANTT_STAGE_ROW_BAR_TOP : STAGE_BAR_TOP
+    const stageBarTop = rowY + barTopOffset
+    const stageBarBottom = rowY + barTopOffset + STAGE_BAR_H
 
     return (
       <g className="date-shift-indicator stage-date-shift">
@@ -636,6 +634,62 @@ export function GanttView({ project }: Props) {
                 )
               })}
             </g>
+          )
+        })}
+      </g>
+    )
+  }
+
+  const renderExpandedStageDependencyArrows = (
+    task: Task,
+    stageLayoutById: Map<number, { y: number; h: number }>
+  ) => {
+    const links = collectStageDependencyLinks(task.sub_stages ?? [])
+    if (!links.length) return null
+
+    const rangeById = new Map(
+      (task.sub_stages ?? [])
+        .map((s) => [s.id, getStageBarRange(s)] as const)
+        .filter((entry): entry is [number, NonNullable<ReturnType<typeof getStageBarRange>>] =>
+          Boolean(entry[1])
+        )
+    )
+
+    return (
+      <g className="stage-dependency-layer">
+        {links.map((link) => {
+          const predLayout = stageLayoutById.get(link.predStageId)
+          const succLayout = stageLayoutById.get(link.succStageId)
+          const predRange = rangeById.get(link.predStageId)
+          if (!predLayout || !succLayout || !predRange) return null
+
+          const fromX = stageDependencyFromX(link.predEnd, link.predStart, dayWidth, xForDate)
+          const toX = stageDependencyToX(link.succStart, xForDate)
+          const y1 = predLayout.y + predLayout.h / 2
+          const y2 = succLayout.y + succLayout.h / 2
+
+          return (
+            <path
+              key={link.key}
+              d={`M ${fromX} ${y1} C ${fromX + 20} ${y1}, ${toX - 20} ${y2}, ${toX} ${y2}`}
+              fill="none"
+              stroke="#6366f1"
+              strokeWidth={2}
+              strokeDasharray="5 3"
+              markerEnd="url(#arrow-stage-dep)"
+              strokeLinecap="round"
+              className="stage-dep-arrow"
+              opacity={0.9}
+            >
+              <title>
+                {ru.gantt.stageDependency(
+                  link.predNumber,
+                  link.predName,
+                  link.succNumber,
+                  link.succName
+                )}
+              </title>
+            </path>
           )
         })}
       </g>
@@ -801,20 +855,60 @@ export function GanttView({ project }: Props) {
   }, [minDate, maxDate, dayWidth])
 
   const taskShiftOverlays = useMemo(() => {
-    return rows
-      .map((row, i) => {
-        if (row.laneLabel || !row.task) return null
-        const rowY = HEADER_H + i * ROW_H
-        return (
-          <g key={`shifts-${row.task.id}`}>
-            {renderDateShiftArrow(row.task, rowY)}
-            {renderStageDateShiftArrow(row.task, rowY)}
-          </g>
-        )
+    const expandedStageLayouts = new Map<number, Map<number, { y: number; h: number }>>()
+
+    for (const layout of rowLayouts) {
+      if (layout.row.kind !== 'stage') continue
+      const taskId = layout.row.task.id
+      if (!isGanttTaskExpanded(taskId)) continue
+      let byStage = expandedStageLayouts.get(taskId)
+      if (!byStage) {
+        byStage = new Map()
+        expandedStageLayouts.set(taskId, byStage)
+      }
+      byStage.set(layout.row.stage.id, { y: layout.y, h: layout.h })
+    }
+
+    const shiftLayers = rowLayouts
+      .map((layout) => {
+        if (layout.row.kind === 'task') {
+          const task = layout.row.task
+          return (
+            <g key={`shifts-task-${task.id}`}>
+              {renderDateShiftArrow(task, layout.y)}
+            </g>
+          )
+        }
+        if (layout.row.kind === 'stage') {
+          const { task, stage } = layout.row
+          return (
+            <g key={`shifts-stage-${stage.id}`}>
+              {renderStageDateShiftArrow(task, layout.y, layout.h, stage.id)}
+            </g>
+          )
+        }
+        return null
       })
       .filter(Boolean)
+
+    const depLayers = [...expandedStageLayouts.entries()].map(([taskId, stageLayoutById]) => {
+      const task = effectiveById.get(taskId)
+      if (!task) return null
+      return (
+        <g key={`stage-deps-${taskId}`}>
+          {renderExpandedStageDependencyArrows(task, stageLayoutById)}
+        </g>
+      )
+    })
+
+    return (
+      <>
+        {shiftLayers}
+        {depLayers}
+      </>
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, pendingTasks, savedTaskShifts, savedStageShifts, savedMilestoneShifts, dragPreview, drag, minDate, dayWidth, activeShiftCommentKey, showShiftComments, pendingMilestones])
+  }, [rowLayouts, pendingTasks, savedTaskShifts, savedStageShifts, savedMilestoneShifts, dragPreview, drag, minDate, dayWidth, activeShiftCommentKey, showShiftComments, pendingMilestones, effectiveById, ganttExpandedTaskIds])
 
   return (
     <div className="gantt-view">
@@ -873,6 +967,9 @@ export function GanttView({ project }: Props) {
           <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
             <path d="M0,0 L8,4 L0,8 Z" fill="#16a34a" />
           </marker>
+          <marker id="arrow-stage-dep" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7 Z" fill="#6366f1" />
+          </marker>
         </defs>
         <rect x={0} y={0} width={LABEL_W + chartW} height={HEADER_H} fill="#f8fafc" />
         {monthLabels.map((m, i) => (
@@ -881,9 +978,10 @@ export function GanttView({ project }: Props) {
           </text>
         ))}
 
-        {rows.map((row, i) => {
-          const y = HEADER_H + i * ROW_H
-          if (row.laneLabel && row.groupKey) {
+        {rowLayouts.map((layout) => {
+          const { y, h, row, index: i } = layout
+
+          if (row.kind === 'lane') {
             const collapsed = collapsedGroupKeys.includes(row.groupKey)
             const ranges = row.groupDateRanges
             const laneColor = row.groupColor || '#64748b'
@@ -902,10 +1000,10 @@ export function GanttView({ project }: Props) {
                 key={`lane-${row.groupKey}`}
                 className="gantt-lane-header"
                 style={{ cursor: 'pointer' }}
-                onClick={() => toggleGroupCollapsed(row.groupKey!)}
+                onClick={() => toggleGroupCollapsed(row.groupKey)}
               >
-                <rect x={0} y={y} width={LABEL_W + chartW} height={ROW_H} fill="#e2e8f0" />
-                <rect x={0} y={y} width={4} height={ROW_H} fill={laneColor} />
+                <rect x={0} y={y} width={LABEL_W + chartW} height={h} fill="#e2e8f0" />
+                <rect x={0} y={y} width={4} height={h} fill={laneColor} />
                 <text x={16} y={y + 26} className="lane-label">
                   {collapsed ? '▸' : '▾'} {row.laneLabel}
                   <tspan className="lane-count"> ({row.taskCount ?? 0})</tspan>
@@ -940,8 +1038,56 @@ export function GanttView({ project }: Props) {
               </g>
             )
           }
+
+          if (row.kind === 'stage') {
+            const { task, stage, stageIndex } = row
+            const range = getStageBarRange(stage)
+            const stageNum = stageDisplayNumber(stageIndex)
+            const barRange = range ? indicativeBarDates(range.start, range.end) : null
+
+            return (
+              <g key={`stage-${stage.id}`} className="gantt-stage-row">
+                <rect x={0} y={y} width={LABEL_W + chartW} height={h} fill="#f8fafc" />
+                <rect x={0} y={y} width={3} height={h} fill="#c7d2fe" />
+                <text
+                  x={28}
+                  y={y + 20}
+                  className="gantt-stage-label"
+                  onClick={() => setSelectedTaskId(task.id)}
+                >
+                  {ru.gantt.stageRowLabel(stageNum, stage.name)}
+                </text>
+                {barRange && (
+                  <rect
+                    x={xForDate(barRange.start)}
+                    y={y + GANTT_STAGE_ROW_BAR_TOP}
+                    width={Math.max(daysBetween(barRange.start, barRange.end) * dayWidth, 4)}
+                    height={STAGE_BAR_H}
+                    fill={stage.is_done ? '#16a34a' : '#6366f133'}
+                    fillOpacity={stage.is_done ? 0.9 : 1}
+                    stroke={stage.is_done ? '#15803d' : '#6366f1'}
+                    strokeWidth={1}
+                    strokeDasharray={stage.is_indicative ? '3 2' : undefined}
+                    rx={2}
+                    className="gantt-bar-stage"
+                    onClick={() => setSelectedTaskId(task.id)}
+                  >
+                    <title>
+                      {stage.is_done
+                        ? ru.gantt.stageCompleted(
+                            stage.name,
+                            fmtDate(barRange.start),
+                            fmtDate(barRange.end)
+                          )
+                        : `${stageNum}. ${stage.name}`}
+                    </title>
+                  </rect>
+                )}
+              </g>
+            )
+          }
+
           const task = row.task
-          if (!task) return null
           const effective = effectiveById.get(task.id) ?? task
           const catColor = row.category?.color || '#94a3b8'
           const { start, end, pending } = getTaskDates(task)
@@ -950,13 +1096,15 @@ export function GanttView({ project }: Props) {
           const done = effective.completion_pct >= 100
           const pColor = priorityColor(effective.priority)
           const labelX = ganttShowPriority ? 34 : 8
+          const hasStages = taskHasGanttStages(effective)
+          const stagesExpanded = isGanttTaskExpanded(task.id)
+          const nameX = hasStages ? labelX + 14 : labelX
 
           const indRange = showIndicative ? indicativeBarDates(indStart, indEnd) : null
-          const completedStageBars = getCompletedStageBars(effective.sub_stages ?? [])
 
           return (
             <g key={task.id}>
-              <rect x={0} y={y} width={LABEL_W + chartW} height={ROW_H} fill={i % 2 ? '#fff' : '#fafafa'} />
+              <rect x={0} y={y} width={LABEL_W + chartW} height={h} fill={i % 2 ? '#fff' : '#fafafa'} />
               {ganttShowPriority && (
                 <g onClick={() => setSelectedTaskId(task.id)} style={{ cursor: 'pointer' }}>
                   <rect x={4} y={y + 15} width={24} height={14} rx={3} fill={pColor} />
@@ -973,8 +1121,22 @@ export function GanttView({ project }: Props) {
                   </text>
                 </g>
               )}
+              {hasStages && (
+                <text
+                  x={labelX}
+                  y={y + 26}
+                  className="gantt-expand-toggle"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleGanttTaskExpanded(task.id)
+                  }}
+                >
+                  <title>{stagesExpanded ? ru.gantt.collapseStages : ru.gantt.expandStages}</title>
+                  {stagesExpanded ? '▾' : '▸'}
+                </text>
+              )}
               <text
-                x={labelX}
+                x={nameX}
                 y={y + 26}
                 className={`task-label ${done ? 'done' : ''}`}
                 onClick={() => setSelectedTaskId(task.id)}
@@ -997,34 +1159,6 @@ export function GanttView({ project }: Props) {
                   className="gantt-bar-indicative"
                 />
               )}
-              {completedStageBars.map((stageBar) => {
-                const range = indicativeBarDates(stageBar.start, stageBar.end)
-                if (!range) return null
-                return (
-                  <rect
-                    key={`stage-actual-${stageBar.id}`}
-                    x={xForDate(range.start)}
-                    y={y + 28}
-                    width={Math.max(daysBetween(range.start, range.end) * dayWidth, 4)}
-                    height={10}
-                    fill="#16a34a"
-                    fillOpacity={0.9}
-                    stroke="#15803d"
-                    strokeWidth={1}
-                    rx={2}
-                    className="gantt-bar-stage-actual"
-                    onClick={() => setSelectedTaskId(task.id)}
-                  >
-                    <title>
-                      {ru.gantt.stageCompleted(
-                        stageBar.name,
-                        fmtDate(range.start),
-                        fmtDate(range.end)
-                      )}
-                    </title>
-                  </rect>
-                )
-              })}
               {start && end && (
                 <g>
                   {ganttShowPriority && (
