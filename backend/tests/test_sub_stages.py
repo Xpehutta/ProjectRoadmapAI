@@ -196,3 +196,92 @@ def test_sub_stage_predecessor_ids(client):
         json={"predecessor_stage_ids": [99999]},
     )
     assert bad.status_code == 400
+
+
+def test_delete_sub_stage_cleans_internal_and_task_dependencies(client):
+    test_client, session, task = client
+    from app.models import Dependency, Task
+
+    first = test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={"name": "Этап 1", "sort_order": 0},
+    ).json()
+    second = test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={"name": "Этап 2", "sort_order": 1},
+    ).json()
+    test_client.patch(
+        f"/api/tasks/{task.id}/sub-stages/{second['id']}",
+        json={"predecessor_stage_ids": [first["id"]]},
+    )
+
+    other = Task(project_id=task.project_id, name="Other task", component_id=None)
+    session.add(other)
+    session.flush()
+    session.add(
+        Dependency(
+            project_id=task.project_id,
+            predecessor_id=task.id,
+            successor_id=other.id,
+            predecessor_stage_id=first["id"],
+            successor_stage_id=None,
+        )
+    )
+    session.commit()
+
+    response = test_client.delete(f"/api/tasks/{task.id}/sub-stages/{first['id']}")
+    assert response.status_code == 204
+
+    stages = test_client.get(f"/api/tasks/{task.id}/sub-stages").json()
+    second_updated = next(s for s in stages if s["id"] == second["id"])
+    assert second_updated["predecessor_stage_ids"] == []
+
+    remaining = session.query(Dependency).filter(Dependency.predecessor_stage_id == first["id"]).all()
+    assert remaining == []
+
+
+def test_delete_completed_stage_clears_actual_and_recomputes_indicative(client):
+    test_client, session, task = client
+
+    stage = test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={
+            "name": "Разработка",
+            "sort_order": 0,
+            "start_date": "2024-03-01",
+            "end_date": "2024-03-15",
+            "is_indicative": True,
+        },
+    ).json()
+    test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={
+            "name": "Тестирование",
+            "sort_order": 1,
+            "start_date": "2024-04-01",
+            "end_date": "2024-04-10",
+            "is_indicative": True,
+        },
+    )
+    test_client.patch(
+        f"/api/tasks/{task.id}/sub-stages/{stage['id']}",
+        json={"is_done": True},
+    )
+    session.expire_all()
+    session.refresh(task)
+    assert task.start_date == date(2024, 3, 1)
+    assert task.end_date == date(2024, 3, 15)
+    assert task.indicative_start == date(2024, 3, 1)
+    assert task.indicative_end == date(2024, 4, 10)
+
+    response = test_client.delete(f"/api/tasks/{task.id}/sub-stages/{stage['id']}")
+    assert response.status_code == 204
+
+    session.expire_all()
+    session.refresh(task)
+    assert task.start_date is None
+    assert task.end_date is None
+    assert task.duration_days is None
+    assert task.indicative_start == date(2024, 4, 1)
+    assert task.indicative_end == date(2024, 4, 10)
+    assert task.completion_pct == 0

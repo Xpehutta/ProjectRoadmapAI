@@ -110,6 +110,7 @@ export function buildGanttRows(input: {
 
       if (expanded.has(task.id)) {
         for (const [stageIndex, stage] of sortedSubStages(task.sub_stages ?? []).entries()) {
+          if (!stage.is_indicative) continue
           rows.push({
             kind: 'stage',
             task,

@@ -1,5 +1,6 @@
 import type { SubStage } from '../types'
-import { daysBetween, parseDate } from './dateShift'
+import { parseDate } from './dateShift'
+import { ganttBarEndX } from './ganttBar'
 import { sortedSubStages, stageEffectiveEndDate } from './subStageDates'
 import { stageDisplayNumber } from './subStageDeps'
 
@@ -22,6 +23,7 @@ export interface StageDependencyLink {
 }
 
 export function getStageBarRange(stage: SubStage): StageBarRange | null {
+  if (!stage.is_indicative) return null
   const start = parseDate(stage.start_date)
   const end = parseDate(stageEffectiveEndDate(stage))
   if (!start && !end) return null
@@ -80,8 +82,7 @@ export function stageDependencyFromX(
   dayWidth: number,
   xForDate: (d: Date) => number
 ): number {
-  const width = Math.max(daysBetween(predStart, predEnd) * dayWidth, 4)
-  return xForDate(predStart) + width
+  return ganttBarEndX(predStart, predEnd, dayWidth, xForDate, 4)
 }
 
 export function stageDependencyToX(succStart: Date, xForDate: (d: Date) => number): number {

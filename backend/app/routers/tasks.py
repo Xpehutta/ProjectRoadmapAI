@@ -8,7 +8,8 @@ from app.models import Dependency, Project, Task
 from app.schemas import TaskCreate, TaskOut, TaskPatchResponse, TaskUpdate
 from app.services.component_merge import split_task_changes
 from app.services.scheduling import apply_field_changes, cascade_from_task, detect_cycle
-from app.services.tasks import load_task, resolve_predecessor_refs, task_to_out
+from app.services.tasks import load_task, task_to_out
+from app.services.task_dependency_refs import resolve_predecessor_refs
 
 router = APIRouter(tags=["tasks"])
 
@@ -32,17 +33,20 @@ def create_task(project_id: int, payload: TaskCreate, db: Session = Depends(get_
     db.flush()
     if payload.predecessor_refs:
         try:
-            preds = resolve_predecessor_refs(db, project_id, payload.predecessor_refs)
+            preds = resolve_predecessor_refs(db, project_id, payload.predecessor_refs, task)
         except ValueError as e:
             raise HTTPException(400, str(e))
-        for pred in preds:
-            if detect_cycle(db, project_id, pred.id, task.id):
+        for item in preds:
+            if detect_cycle(db, project_id, item.task.id, task.id):
                 raise HTTPException(400, "Dependency would create a cycle")
             db.add(
                 Dependency(
                     project_id=project_id,
-                    predecessor_id=pred.id,
+                    predecessor_id=item.task.id,
                     successor_id=task.id,
+                    predecessor_stage_id=item.predecessor_stage_id,
+                    successor_stage_id=item.successor_stage_id,
+                    type=item.dep_type,
                 )
             )
     db.commit()
@@ -118,17 +122,20 @@ def update_task(task_id: int, payload: TaskUpdate, db: Session = Depends(get_db)
     if payload.predecessor_refs is not None:
         db.query(Dependency).filter(Dependency.successor_id == task.id).delete()
         try:
-            preds = resolve_predecessor_refs(db, task.project_id, payload.predecessor_refs)
+            preds = resolve_predecessor_refs(db, task.project_id, payload.predecessor_refs, task)
         except ValueError as e:
             raise HTTPException(400, str(e))
-        for pred in preds:
-            if detect_cycle(db, task.project_id, pred.id, task.id):
+        for item in preds:
+            if detect_cycle(db, task.project_id, item.task.id, task.id):
                 raise HTTPException(400, "Dependency would create a cycle")
             db.add(
                 Dependency(
                     project_id=task.project_id,
-                    predecessor_id=pred.id,
+                    predecessor_id=item.task.id,
                     successor_id=task.id,
+                    predecessor_stage_id=item.predecessor_stage_id,
+                    successor_stage_id=item.successor_stage_id,
+                    type=item.dep_type,
                 )
             )
 

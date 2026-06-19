@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models import Dependency, ProjectComponent, Task
 from app.schemas import PredecessorRef, TaskOut
 from app.services.component_merge import effective_sub_stages, merge_task_fields
+from app.services.task_dependency_refs import stage_meta
 
 
 def task_to_out(task: Task, db: Session | None = None) -> TaskOut:
@@ -10,8 +11,20 @@ def task_to_out(task: Task, db: Session | None = None) -> TaskOut:
     if task.predecessors:
         for dep in task.predecessors:
             if dep.predecessor:
+                pred_name, pred_num = stage_meta(dep.predecessor, dep.predecessor_stage_id)
+                succ_name, succ_num = stage_meta(task, dep.successor_stage_id)
                 preds.append(
-                    PredecessorRef(id=dep.predecessor.id, name=dep.predecessor.name, type=dep.type)
+                    PredecessorRef(
+                        id=dep.predecessor.id,
+                        name=dep.predecessor.name,
+                        type=dep.type,
+                        predecessor_stage_id=dep.predecessor_stage_id,
+                        predecessor_stage_name=pred_name,
+                        predecessor_stage_number=pred_num,
+                        successor_stage_id=dep.successor_stage_id,
+                        successor_stage_name=succ_name,
+                        successor_stage_number=succ_num,
+                    )
                 )
     merged = merge_task_fields(task)
     sub_stages = effective_sub_stages(task)
@@ -85,17 +98,4 @@ def load_task(db: Session, task_id: int) -> Task | None:
     )
 
 
-def resolve_predecessor_refs(db: Session, project_id: int, refs: list[str]) -> list[Task]:
-    tasks = db.query(Task).filter(Task.project_id == project_id).all()
-    by_id = {str(t.id): t for t in tasks}
-    by_name = {t.name.lower(): t for t in tasks}
-    resolved: list[Task] = []
-    for ref in refs:
-        ref = ref.strip()
-        if not ref:
-            continue
-        task = by_id.get(ref) or by_name.get(ref.lower())
-        if not task:
-            raise ValueError(f"Unknown predecessor reference: {ref}")
-        resolved.append(task)
-    return resolved
+from app.services.task_dependency_refs import resolve_predecessor_refs as resolve_predecessor_refs_full

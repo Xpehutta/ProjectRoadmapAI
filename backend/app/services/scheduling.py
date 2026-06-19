@@ -5,6 +5,28 @@ from sqlalchemy.orm import Session
 
 from app.models import Dependency, DependencyType, Task
 from app.services.audit import classify_field, log_change
+from app.services.component_merge import effective_sub_stages
+
+
+def _sorted_stages(task: Task):
+    return sorted(effective_sub_stages(task), key=lambda s: s.sort_order)
+
+
+def _stage_end_date(stage) -> date | None:
+    return stage.end_date or stage.due_date or stage.start_date
+
+
+def _stage_start_date(stage) -> date | None:
+    return stage.start_date or stage.due_date or stage.end_date
+
+
+def _stage_by_id(task: Task, stage_id: int | None):
+    if stage_id is None:
+        return None
+    for stage in _sorted_stages(task):
+        if stage.id == stage_id:
+            return stage
+    return None
 
 
 def _task_duration(task: Task) -> int:
@@ -23,18 +45,32 @@ def _set_task_dates(task: Task, start: date, end: date) -> None:
 
 def _constraint_date(pred: Task, dep: Dependency) -> date | None:
     lag = timedelta(days=dep.lag_days)
+    pred_stage = _stage_by_id(pred, dep.predecessor_stage_id)
+
     if dep.type == DependencyType.FS:
-        if pred.end_date:
-            return pred.end_date + lag + timedelta(days=1)
+        end = _stage_end_date(pred_stage) if pred_stage else pred.end_date
+        if end:
+            return end + lag + timedelta(days=1)
     elif dep.type == DependencyType.SS:
-        if pred.start_date:
-            return pred.start_date + lag
+        start = _stage_start_date(pred_stage) if pred_stage else pred.start_date
+        if start:
+            return start + lag
     elif dep.type == DependencyType.FF:
-        if pred.end_date:
-            return pred.end_date + lag
+        end = _stage_end_date(pred_stage) if pred_stage else pred.end_date
+        if end:
+            return end + lag
     elif dep.type == DependencyType.SF:
-        if pred.start_date:
-            return pred.start_date + lag - timedelta(days=_task_duration(pred) - 1)
+        start = _stage_start_date(pred_stage) if pred_stage else pred.start_date
+        if start:
+            duration = _task_duration(pred) if not pred_stage else max(
+                1,
+                (
+                    (_stage_end_date(pred_stage) - _stage_start_date(pred_stage)).days + 1
+                    if _stage_start_date(pred_stage) and _stage_end_date(pred_stage)
+                    else 1
+                ),
+            )
+            return start + lag - timedelta(days=duration - 1)
     return None
 
 

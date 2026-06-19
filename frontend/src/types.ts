@@ -53,6 +53,12 @@ export interface PredecessorRef {
   id: number
   name: string
   type: DependencyType
+  predecessor_stage_id?: number | null
+  predecessor_stage_name?: string | null
+  predecessor_stage_number?: number | null
+  successor_stage_id?: number | null
+  successor_stage_name?: string | null
+  successor_stage_number?: number | null
 }
 
 export interface ProjectComponent {
@@ -145,6 +151,8 @@ export interface Dependency {
   project_id: number
   predecessor_id: number
   successor_id: number
+  predecessor_stage_id?: number | null
+  successor_stage_id?: number | null
   type: DependencyType
   lag_days: number
 }

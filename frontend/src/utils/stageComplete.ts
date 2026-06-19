@@ -12,6 +12,11 @@ export function stagePlannedDates(stage: SubStage): {
   }
 }
 
+/** Stage is on the Gantt / counts toward task indicative dates. */
+export function isStagePlanned(stage: SubStage): boolean {
+  return stage.is_indicative === true
+}
+
 export function stageDatesChanged(
   stage: SubStage,
   confirmed: { start_date: string | null; end_date: string | null }

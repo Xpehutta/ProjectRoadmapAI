@@ -38,6 +38,14 @@ interface SavedDateShiftsState {
   recordIndicativeShift: (entry: SavedTaskDateShift) => void
   recordStageShift: (entry: SavedStageDateShift) => void
   recordMilestoneFromPending: (change: PendingMilestoneDate) => void
+  clearStageShift: (taskId: number, stageId: number) => void
+  pruneStageShiftsForTask: (taskId: number, existingStageIds: number[]) => void
+  clearTaskDateShifts: (taskId: number) => void
+  removeIndicativeShiftTransition: (
+    taskId: number,
+    orig: { start: string | null; end: string | null },
+    cur: { start: string | null; end: string | null }
+  ) => void
   clearTaskShifts: (taskId: number) => void
 }
 
@@ -107,6 +115,60 @@ export const useSavedDateShiftsStore = create<SavedDateShiftsState>()(
               [change.milestoneId]: [...prev, entry],
             },
           }
+        }),
+
+      clearStageShift: (taskId, stageId) =>
+        set((s) => {
+          const prev = s.stageShifts[taskId]
+          if (!prev?.length) return s
+          const next = prev.filter((e) => e.stageId !== stageId)
+          if (next.length === prev.length) return s
+          const stageShifts = { ...s.stageShifts }
+          if (next.length) stageShifts[taskId] = next
+          else delete stageShifts[taskId]
+          return { ...s, stageShifts }
+        }),
+
+      pruneStageShiftsForTask: (taskId, existingStageIds) =>
+        set((s) => {
+          const prev = s.stageShifts[taskId]
+          if (!prev?.length) return s
+          const allowed = new Set(existingStageIds)
+          const next = prev.filter((e) => allowed.has(e.stageId))
+          if (next.length === prev.length) return s
+          const stageShifts = { ...s.stageShifts }
+          if (next.length) stageShifts[taskId] = next
+          else delete stageShifts[taskId]
+          return { ...s, stageShifts }
+        }),
+
+      clearTaskDateShifts: (taskId) =>
+        set((s) => {
+          if (!s.taskShifts[taskId]?.length) return s
+          const taskShifts = { ...s.taskShifts }
+          delete taskShifts[taskId]
+          return { ...s, taskShifts }
+        }),
+
+      removeIndicativeShiftTransition: (taskId, orig, cur) =>
+        set((s) => {
+          if (!orig.start || !orig.end || !cur.start || !cur.end) return s
+          const prev = s.taskShifts[taskId]
+          if (!prev?.length) return s
+          const next = prev.filter(
+            (e) =>
+              !(
+                e.origStart === orig.start &&
+                e.origEnd === orig.end &&
+                e.curStart === cur.start &&
+                e.curEnd === cur.end
+              )
+          )
+          if (next.length === prev.length) return s
+          const taskShifts = { ...s.taskShifts }
+          if (next.length) taskShifts[taskId] = next
+          else delete taskShifts[taskId]
+          return { ...s, taskShifts }
         }),
 
       clearTaskShifts: (taskId) =>

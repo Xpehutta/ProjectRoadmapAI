@@ -227,12 +227,22 @@ class ComponentSubStage(Base):
 
 class Dependency(Base):
     __tablename__ = "dependencies"
-    __table_args__ = (UniqueConstraint("predecessor_id", "successor_id", name="uq_dependency"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "predecessor_id",
+            "successor_id",
+            "predecessor_stage_id",
+            "successor_stage_id",
+            name="uq_dependency_pair",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     predecessor_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     successor_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    predecessor_stage_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    successor_stage_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     type: Mapped[DependencyType] = mapped_column(Enum(DependencyType), default=DependencyType.FS)
     lag_days: Mapped[int] = mapped_column(Integer, default=0)
 

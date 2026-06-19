@@ -1,7 +1,8 @@
 import type { Task } from '../types'
-import { normalizeCustomFields } from './drawerTabFields'
+import { normalizeCustomFields, customFieldsEqual } from './drawerTabFields'
+import { formatPredecessorRef } from './taskDependencyRefs'
 
-export { normalizeCustomFields, customFieldsEqual } from './drawerTabFields'
+export { normalizeCustomFields, customFieldsEqual }
 
 /** Fields stored on shared components — kept in sync with backend SHARED_TASK_FIELDS */
 export const COMPONENT_SHARED_FIELDS = [
@@ -57,7 +58,7 @@ export function taskEditSnapshot(task: Task): Record<string, unknown> {
     custom_fields: normalizeCustomFields(
       task.custom_fields as Record<string, unknown> | null | undefined
     ),
-    predecessor_refs: task.predecessors.map((p) => p.name).join(', '),
+    predecessor_refs: task.predecessors.map((p) => formatPredecessorRef(p)).join(', '),
   }
 }
 

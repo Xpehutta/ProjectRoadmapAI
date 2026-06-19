@@ -10,11 +10,13 @@ class _Stage:
         end_date: date | None = None,
         due_date: date | None = None,
         is_done: bool = False,
+        is_indicative: bool = True,
     ):
         self.start_date = start_date
         self.end_date = end_date
         self.due_date = due_date
         self.is_done = is_done
+        self.is_indicative = is_indicative
 
 
 def test_indicative_dates_min_start_max_end():
@@ -41,6 +43,14 @@ def test_indicative_min_start_max_end_mixed_dates():
 
 def test_indicative_empty_when_no_dates():
     assert indicative_dates_from_stages([_Stage()]) == (None, None)
+
+
+def test_indicative_excludes_unplanned_stages():
+    stages = [
+        _Stage(start_date=date(2024, 1, 1), end_date=date(2024, 1, 31), is_indicative=False),
+        _Stage(start_date=date(2024, 3, 1), end_date=date(2024, 3, 10), is_indicative=True),
+    ]
+    assert indicative_dates_from_stages(stages) == (date(2024, 3, 1), date(2024, 3, 10))
 
 
 def test_actual_dates_from_completed_stages_only():

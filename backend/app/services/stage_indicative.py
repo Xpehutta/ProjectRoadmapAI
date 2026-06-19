@@ -17,11 +17,16 @@ def _stage_end(stage: TaskSubStage | ComponentSubStage) -> date | None:
     return stage.end_date or stage.due_date or stage.start_date
 
 
+def _planned_stages(stages):
+    return [s for s in stages if getattr(s, "is_indicative", False)]
+
+
 def indicative_dates_from_stages(
     stages: list[TaskSubStage] | list[ComponentSubStage],
 ) -> tuple[date | None, date | None]:
-    starts = [start for s in stages if (start := _stage_start(s))]
-    ends = [end for s in stages if (end := _stage_end(s))]
+    planned = _planned_stages(stages)
+    starts = [start for s in planned if (start := _stage_start(s))]
+    ends = [end for s in planned if (end := _stage_end(s))]
     return (
         min(starts) if starts else None,
         max(ends) if ends else None,
@@ -29,10 +34,11 @@ def indicative_dates_from_stages(
 
 
 def indicative_dates_from_stage_outs(stages) -> tuple[date | None, date | None]:
-    """Compute indicative range from API sub-stage objects (SubStageOut)."""
-    starts = [s.start_date or s.end_date or s.due_date for s in stages]
+    """Compute indicative range from planned API sub-stage objects (SubStageOut)."""
+    planned = [s for s in stages if s.is_indicative]
+    starts = [s.start_date or s.end_date or s.due_date for s in planned]
     starts = [d for d in starts if d]
-    ends = [s.end_date or s.due_date or s.start_date for s in stages]
+    ends = [s.end_date or s.due_date or s.start_date for s in planned]
     ends = [d for d in ends if d]
     return (
         min(starts) if starts else None,

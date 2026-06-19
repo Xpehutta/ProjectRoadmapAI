@@ -131,6 +131,23 @@ export function savedTaskShiftToDateShift(saved: {
   }
 }
 
+/** Hide saved shifts that no longer relate to current task or indicative dates (e.g. after stage delete). */
+export function savedTaskShiftStillRelevant(
+  task: Pick<Task, 'start_date' | 'end_date' | 'indicative_start' | 'indicative_end'>,
+  saved: { origStart: string; origEnd: string; curStart: string; curEnd: string }
+): boolean {
+  const ranges: [string | null, string | null][] = [
+    [task.indicative_start, task.indicative_end],
+    [task.start_date, task.end_date],
+  ]
+  for (const [start, end] of ranges) {
+    if (!start || !end) continue
+    if (start === saved.curStart && end === saved.curEnd) return true
+    if (start === saved.origStart && end === saved.origEnd) return true
+  }
+  return false
+}
+
 export function savedMilestoneShiftToDelta(saved: {
   original_date: string
   date: string

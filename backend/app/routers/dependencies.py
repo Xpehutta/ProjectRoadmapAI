@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models import Dependency, Project
 from app.schemas import DependencyCreate, DependencyOut
 from app.services.scheduling import detect_cycle
+from app.services.task_dependency_refs import validate_dependency_stages
 
 router = APIRouter(prefix="/projects/{project_id}/dependencies", tags=["dependencies"])
 
@@ -21,6 +22,13 @@ def create_dependency(project_id: int, payload: DependencyCreate, db: Session = 
         raise HTTPException(404, "Project not found")
     if detect_cycle(db, project_id, payload.predecessor_id, payload.successor_id):
         raise HTTPException(400, "Dependency would create a cycle")
+    validate_dependency_stages(
+        db,
+        payload.predecessor_id,
+        payload.successor_id,
+        payload.predecessor_stage_id,
+        payload.successor_stage_id,
+    )
     dep = Dependency(project_id=project_id, **payload.model_dump())
     db.add(dep)
     db.commit()

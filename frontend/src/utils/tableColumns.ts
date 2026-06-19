@@ -1,5 +1,6 @@
 import type { ProjectDetail, Task, TaskStatus } from '../types'
 import { ru, STATUS_OPTIONS } from '../locale/ru'
+import { formatPredecessorRef } from './taskDependencyRefs'
 
 export type TableColumnType = 'text' | 'textarea' | 'number' | 'date' | 'status' | 'category' | 'readonly'
 
@@ -154,7 +155,7 @@ export function getTaskCellValue(task: Task, col: TableColumnDef): unknown {
     return task.custom_fields?.[col.key] ?? ''
   }
   if (col.key === 'predecessors') {
-    return task.predecessors.map((p) => p.name).join(', ')
+    return task.predecessors.map((p) => formatPredecessorRef(p)).join(', ')
   }
   return task[col.key as keyof Task]
 }

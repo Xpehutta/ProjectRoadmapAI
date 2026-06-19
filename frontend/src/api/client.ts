@@ -163,6 +163,8 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  deleteSubStage: (taskId: number, stageId: number) =>
+    request<void>(`/api/tasks/${taskId}/sub-stages/${stageId}`, { method: 'DELETE' }),
   completeAllSubStages: (taskId: number) =>
     request<SubStage[]>(`/api/tasks/${taskId}/sub-stages/complete-all`, {
       method: 'POST',

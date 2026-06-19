@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { api } from '../api/client'
+import { DeleteStageModal } from './DeleteStageModal'
 import { DateShiftIndicator } from './DateShiftIndicator'
 import { PendingShiftComment } from './PendingShiftComment'
 import { StageCompleteModal } from './StageCompleteModal'
-import { StageShiftModal } from './StageShiftModal'
+import { StageShiftModal, type StageDateModalMode } from './StageShiftModal'
 import { useTaskDateShifts } from '../hooks/useTaskDateShift'
 import { useEffectiveTask } from '../hooks/useEffectiveTasks'
+import { useEffectiveTasks } from '../hooks/useEffectiveTasks'
+import { useDateAutoFillPrompt } from '../hooks/useDateAutoFillPrompt'
 import { useDeleteTask } from '../hooks/useProject'
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useSavedDateShiftsStore } from '../stores/savedDateShiftsStore'
@@ -20,7 +23,11 @@ import {
 } from '../utils/stageTemplates'
 import { formatLocaleDateTime, HISTORY_FILTER_OPTIONS, ru } from '../locale/ru'
 import { formatScore, MOSCOW_OPTIONS, prioritizationScore } from '../utils/scoring'
-import { refreshProjectAfterSubStageChange } from '../utils/subStageRefresh'
+import {
+  refreshProjectAfterSubStageChange,
+  patchSubStageInProjectCache,
+  removeSubStageFromProjectCache,
+} from '../utils/subStageRefresh'
 import {
   sortedSubStages,
   stageEffectiveEndDate,
@@ -33,7 +40,7 @@ import {
   parseStagePredecessorNumbers,
   stageDisplayNumber,
 } from '../utils/subStageDeps'
-import { indicativeRangeChanged, buildStageShiftEntry, stageDatesChanged, stagePlannedDates } from '../utils/stageComplete'
+import { indicativeRangeChanged, buildStageShiftEntry, stageDatesChanged, stagePlannedDates, isStagePlanned } from '../utils/stageComplete'
 import {
   mergeTaskCustomFields,
   readShowcaseDevelopmentRequired,
@@ -52,6 +59,26 @@ import {
   EFFORT_K_MA_KEY,
 } from '../utils/effortCalculator'
 import { PlannedEffortCalculator } from './PlannedEffortCalculator'
+import { NewStageDependencyFields } from './NewStageDependencyFields'
+import { StageInternalDependenciesEditor } from './StageInternalDependenciesEditor'
+import { TaskDependenciesEditor } from './TaskDependenciesEditor'
+import {
+  draftsFromPredecessors,
+  draftsToPredecessorRefs,
+  parsePredecessorRefsText,
+  type TaskDependencyDraft,
+} from '../utils/taskDependencyRefs'
+import {
+  stageNeedsDependencyStartFill,
+  suggestedStartFromDependencyDraft,
+  taskNeedsDependencyStartFill,
+} from '../utils/taskDependencyDates'
+import {
+  adjustDependencyDraftsAfterStageDelete,
+  collectStageDeleteWarnings,
+  type StageDeleteWarning,
+} from '../utils/stageDeleteWarnings'
+import { suggestedStartFromInternalStagePredIds, suggestedStartFromInternalStagePredecessors } from '../utils/stageInternalDeps'
 
 interface Props {
   project: ProjectDetail
@@ -79,7 +106,8 @@ export function TaskDrawer({ project, task }: Props) {
   const [newStageName, setNewStageName] = useState('')
   const [newStageStartDate, setNewStageStartDate] = useState('')
   const [newStageEndDate, setNewStageEndDate] = useState('')
-  const [newStageIndicative, setNewStageIndicative] = useState(false)
+  const [newStageDependency, setNewStageDependency] = useState<TaskDependencyDraft | null>(null)
+  const [newStageInternalPredIds, setNewStageInternalPredIds] = useState<number[]>([])
   const [addingStage, setAddingStage] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [saveTemplateForReuse, setSaveTemplateForReuse] = useState(false)
@@ -89,15 +117,28 @@ export function TaskDrawer({ project, task }: Props) {
     stage: SubStage
     stageIndex: number
     initial?: { start_date: string | null; end_date: string | null }
+    mode: StageDateModalMode
   } | null>(null)
   const [shiftingStageSubmitting, setShiftingStageSubmitting] = useState(false)
   const [stageDateInputReset, setStageDateInputReset] = useState(0)
   const [stagePredecessorReset, setStagePredecessorReset] = useState(0)
   const [stagePredecessorError, setStagePredecessorError] = useState<number | null>(null)
+  const [stageToDelete, setStageToDelete] = useState<{
+    stage: SubStage
+    stageIndex: number
+    warnings: StageDeleteWarning[]
+  } | null>(null)
+  const [deletingStage, setDeletingStage] = useState(false)
+  const [internalDepsBusy, setInternalDepsBusy] = useState(false)
+  const [internalDepsError, setInternalDepsError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TaskDrawerTab>('general')
   const [plannedEffortInputKey, setPlannedEffortInputKey] = useState(0)
   const recordIndicativeShift = useSavedDateShiftsStore((s) => s.recordIndicativeShift)
   const recordStageShift = useSavedDateShiftsStore((s) => s.recordStageShift)
+  const clearStageShift = useSavedDateShiftsStore((s) => s.clearStageShift)
+  const pruneStageShiftsForTask = useSavedDateShiftsStore((s) => s.pruneStageShiftsForTask)
+  const clearTaskDateShifts = useSavedDateShiftsStore((s) => s.clearTaskDateShifts)
+  const { requestDate, dateAutoFillModal } = useDateAutoFillPrompt()
 
   const { data: stageLibrary } = useQuery({
     queryKey: ['stage-templates', project.id],
@@ -132,6 +173,11 @@ export function TaskDrawer({ project, task }: Props) {
   }
 
   const effective = useEffectiveTask(project.tasks, task.id)
+  const effectiveTasks = useEffectiveTasks(project.tasks)
+  const effectiveTasksById = useMemo(
+    () => new Map(effectiveTasks.map((t) => [t.id, t])),
+    [effectiveTasks]
+  )
   const hasPending = Boolean(pending)
   const dateShifts = useTaskDateShifts(task)
   const linkedComponent = task.component_id
@@ -139,6 +185,39 @@ export function TaskDrawer({ project, task }: Props) {
     : undefined
   const otherUsages =
     linkedComponent?.usages.filter((u) => u.id !== task.id) ?? []
+
+  const tasksById = useMemo(() => new Map(project.tasks.map((t) => [t.id, t])), [project.tasks])
+  const tasksByName = useMemo(
+    () => new Map(project.tasks.map((t) => [t.name.toLowerCase(), t])),
+    [project.tasks]
+  )
+
+  const dependencyDrafts = useMemo((): TaskDependencyDraft[] => {
+    const pendingRefs = pending?.patch?.predecessor_refs
+    if (typeof pendingRefs === 'string') {
+      const parsed = parsePredecessorRefsText(
+        pendingRefs,
+        task.id,
+        tasksById,
+        tasksByName
+      )
+      if (parsed !== null) return parsed
+    }
+    return draftsFromPredecessors(effective.predecessors)
+  }, [pending?.patch?.predecessor_refs, effective.predecessors, task.id, tasksById, tasksByName])
+
+  const dependencyDraftsAuthoritative = typeof pending?.patch?.predecessor_refs === 'string'
+
+  const handleDependencyDraftsChange = (drafts: TaskDependencyDraft[]) => {
+    const prevCount = dependencyDrafts.length
+    const refs = draftsToPredecessorRefs(drafts, tasksById)
+    stageTaskChange(task, { predecessor_refs: refs.join(', ') })
+    if (drafts.length > prevCount) {
+      queueMicrotask(() =>
+        void offerAutofillForDependencyDraft(drafts[drafts.length - 1], undefined, { silent: true })
+      )
+    }
+  }
 
   const unlink = useMutation({
     mutationFn: () => api.unlinkTaskComponent(task.id),
@@ -179,20 +258,13 @@ export function TaskDrawer({ project, task }: Props) {
   })
 
   const toggleStage = async (stage: SubStage) => {
+    if (!isStagePlanned(stage)) return
     if (stage.is_done) {
       await api.updateSubStage(task.id, stage.id, { is_done: false })
       await refreshProjectAfterSubStageChange(qc, project.id)
       return
     }
     setCompletingStage(stage)
-  }
-
-  const openStageShift = (
-    stageItem: SubStage,
-    stageIndex: number,
-    initial?: { start_date: string | null; end_date: string | null }
-  ) => {
-    setShiftingStage({ stage: stageItem, stageIndex, initial })
   }
 
   const cancelStageShift = () => {
@@ -203,9 +275,28 @@ export function TaskDrawer({ project, task }: Props) {
   const maybeFillPrecedingEnd = async (stageIndex: number, startDate: string | null) => {
     const fill = stageNeedsPrecedingEndFill(task.sub_stages, stageIndex, startDate)
     if (!fill) return
-    if (!confirm(ru.drawer.autoFillPrecedingEnd(fill.proposedEnd, fill.preceding.name))) return
-    await api.updateSubStage(task.id, fill.preceding.id, { end_date: fill.proposedEnd })
+    const chosen = await requestDate(
+      ru.drawer.autoFillPrecedingEndPrompt(fill.proposedEnd, fill.preceding.name),
+      fill.proposedEnd,
+      ru.drawer.stageEndDate
+    )
+    if (!chosen) return
+    await api.updateSubStage(task.id, fill.preceding.id, { end_date: chosen })
     await refreshProjectAfterSubStageChange(qc, project.id)
+  }
+
+  /** Set stage dates on save without shift modal or Gantt shift markers. */
+  const applyStageDatesSilently = async (
+    stageItem: SubStage,
+    dates: { start_date: string | null; end_date: string | null }
+  ) => {
+    await api.updateSubStage(task.id, stageItem.id, {
+      start_date: dates.start_date,
+      end_date: dates.end_date,
+    })
+    patchSubStageInProjectCache(qc, project.id, stageItem.id, dates)
+    await refreshProjectAfterSubStageChange(qc, project.id)
+    setStageDateInputReset((n) => n + 1)
   }
 
   const handleStageCompleteConfirm = async (data: {
@@ -222,7 +313,8 @@ export function TaskDrawer({ project, task }: Props) {
     try {
       await persistStageDates(stageItem, data, {
         stageIndex,
-        recordShift,
+        recordShift: recordShift && isStagePlanned(stageItem),
+        markPlanned: !isStagePlanned(stageItem),
         markDone: true,
         comment: data.comment,
       })
@@ -240,9 +332,24 @@ export function TaskDrawer({ project, task }: Props) {
     if (!shiftingStage) return
     setShiftingStageSubmitting(true)
     try {
+      if (shiftingStage.mode === 'correct') {
+        await applyStageDatesSilently(shiftingStage.stage, data)
+        if (data.comment.trim()) {
+          await api.addComment(
+            task.id,
+            `Скорректированы сроки этапа «${shiftingStage.stage.name}»: ${data.comment.trim()}`
+          )
+          await qc.invalidateQueries({ queryKey: ['comments', task.id] })
+          await qc.invalidateQueries({ queryKey: ['history', task.id] })
+        }
+        setShiftingStage(null)
+        return
+      }
+
       await persistStageDates(shiftingStage.stage, data, {
         stageIndex: shiftingStage.stageIndex,
-        recordShift: true,
+        recordShift: shiftingStage.mode === 'shift',
+        markPlanned: shiftingStage.mode === 'plan',
         comment: data.comment,
       })
       setShiftingStage(null)
@@ -258,10 +365,14 @@ export function TaskDrawer({ project, task }: Props) {
       stageIndex: number
       recordShift: boolean
       markDone?: boolean
+      markPlanned?: boolean
       comment?: string
     }
   ) => {
     const datesChanged = stageDatesChanged(stageItem, confirmed)
+    const markingPlanned = Boolean(options.markPlanned && !isStagePlanned(stageItem))
+    if (!datesChanged && !markingPlanned && !options.markDone) return
+
     const prevIndicative = {
       start: effective.indicative_start,
       end: effective.indicative_end,
@@ -273,6 +384,7 @@ export function TaskDrawer({ project, task }: Props) {
 
     await api.updateSubStage(task.id, stageItem.id, {
       ...(options.markDone ? { is_done: true } : {}),
+      ...(markingPlanned ? { is_indicative: true } : {}),
       start_date: confirmed.start_date,
       end_date: confirmed.end_date,
     })
@@ -281,13 +393,17 @@ export function TaskDrawer({ project, task }: Props) {
     const updatedProject = qc.getQueryData<ProjectDetail>(['project', project.id])
     const updatedTask = updatedProject?.tasks.find((t) => t.id === task.id)
 
-    if (datesChanged && options.comment?.trim()) {
-      await api.addComment(task.id, `Этап «${stageItem.name}»: ${options.comment.trim()}`)
+    if ((datesChanged || markingPlanned) && options.comment?.trim()) {
+      const label =
+        markingPlanned && !datesChanged
+          ? `Запланирован этап «${stageItem.name}»`
+          : `Этап «${stageItem.name}»`
+      await api.addComment(task.id, `${label}: ${options.comment!.trim()}`)
       await qc.invalidateQueries({ queryKey: ['comments', task.id] })
       await qc.invalidateQueries({ queryKey: ['history', task.id] })
     }
 
-    if (datesChanged && options.recordShift) {
+    if (options.recordShift && !markingPlanned && datesChanged) {
       const stageShift = buildStageShiftEntry(task.id, stageItem, confirmed, options.comment)
       if (stageShift) {
         recordStageShift(stageShift)
@@ -319,28 +435,182 @@ export function TaskDrawer({ project, task }: Props) {
   }
 
   const completeAll = async () => {
-    await api.completeAllSubStages(task.id)
+    for (const stage of orderedStages) {
+      if (isStagePlanned(stage) && !stage.is_done) {
+        await api.updateSubStage(task.id, stage.id, { is_done: true })
+      }
+    }
     await refreshProjectAfterSubStageChange(qc, project.id)
   }
 
-  const resolveNewStageStartDate = (): string | null => {
-    if (newStageStartDate) return newStageStartDate
-    const fill = stageNeedsFollowingStartFill(task.sub_stages, null)
+  const offerDependencyStageStart = async (
+    stageItem: SubStage
+  ): Promise<{ start_date: string | null; end_date: string | null } | null> => {
+    const fill = stageNeedsDependencyStartFill(
+      project,
+      task,
+      stageItem,
+      effectiveTasksById,
+      dependencyDrafts,
+      stageItem.start_date,
+      dependencyDraftsAuthoritative
+    )
     if (!fill) return null
-    if (!confirm(ru.drawer.autoFillFollowingStart(fill.proposedStart, fill.preceding.name))) {
-      return null
+    const chosen = await requestDate(
+      ru.drawer.autoFillFromTaskDependencyPrompt(fill.label, fill.date),
+      fill.date,
+      ru.drawer.stageStartDate
+    )
+    if (!chosen) return null
+    const planned = stagePlannedDates(stageItem)
+    return {
+      start_date: chosen,
+      end_date: planned.end_date,
     }
-    return fill.proposedStart
   }
 
-  const handleNewStageStartChange = async (value: string) => {
+  const offerStageStartAutofill = async (
+    stageItem: SubStage
+  ): Promise<{ start_date: string | null; end_date: string | null } | undefined> => {
+    if (stageItem.start_date) return undefined
+    const fromDep = await offerDependencyStageStart(stageItem)
+    if (fromDep) return fromDep
+    if (stageItem.predecessor_stage_ids?.length) {
+      const suggestion = suggestedStartFromInternalStagePredecessors(orderedStages, stageItem.id)
+      if (suggestion) {
+        const chosen = await requestDate(
+          ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
+          suggestion.date,
+          ru.drawer.stageStartDate
+        )
+        if (chosen) {
+          return {
+            start_date: chosen,
+            end_date: stagePlannedDates(stageItem).end_date,
+          }
+        }
+      }
+    }
+    return undefined
+  }
+
+  const openStageShift = (
+    stageItem: SubStage,
+    stageIndex: number,
+    mode: StageDateModalMode,
+    initial?: { start_date: string | null; end_date: string | null }
+  ) => {
+    setShiftingStage({ stage: stageItem, stageIndex, initial, mode })
+  }
+
+  const openStageModalWithAutoFill = async (
+    stageItem: SubStage,
+    stageIndex: number,
+    mode: StageDateModalMode
+  ) => {
+    const initial = await offerStageStartAutofill(stageItem)
+    openStageShift(stageItem, stageIndex, mode, initial)
+  }
+
+  const openStageShiftWithAutoFill = async (stageItem: SubStage, stageIndex: number) => {
+    await openStageModalWithAutoFill(stageItem, stageIndex, 'shift')
+  }
+
+  const openStagePlanWithAutoFill = async (stageItem: SubStage, stageIndex: number) => {
+    await openStageModalWithAutoFill(stageItem, stageIndex, 'plan')
+  }
+
+  const openStageCorrectWithAutoFill = async (stageItem: SubStage, stageIndex: number) => {
+    await openStageModalWithAutoFill(stageItem, stageIndex, 'correct')
+  }
+
+  const offerAutofillForDependencyDraft = async (
+    draft: TaskDependencyDraft,
+    stageOverride?: { stageItem: SubStage; stageIndex: number },
+    options?: { silent?: boolean }
+  ) => {
+    if (!draft.predecessorId) return
+    const suggestion = suggestedStartFromDependencyDraft(draft, effectiveTasksById)
+    if (!suggestion) return
+
+    if (draft.successorStageNumber != null) {
+      const stageItem =
+        stageOverride?.stageItem ?? orderedStages[draft.successorStageNumber - 1]
+      const stageIdx = stageOverride?.stageIndex ?? draft.successorStageNumber - 1
+      if (!stageItem || stageItem.start_date) return
+      const chosen = await requestDate(
+        ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
+        suggestion.date,
+        ru.drawer.stageStartDate
+      )
+      if (!chosen) return
+      const dates = {
+        start_date: chosen,
+        end_date: stagePlannedDates(stageItem).end_date,
+      }
+      if (options?.silent || !isStagePlanned(stageItem)) {
+        await applyStageDatesSilently(stageItem, dates)
+      } else {
+        openStageShift(stageItem, stageIdx, 'shift', dates)
+      }
+      return
+    }
+
+    if (effective.start_date) return
+    const chosen = await requestDate(
+      ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
+      suggestion.date,
+      ru.drawer.stageStartDate
+    )
+    if (chosen) {
+      stageTaskChange(task, { start_date: chosen, end_date: effective.end_date })
+    }
+  }
+
+  const handleNewStageStartChange = (value: string) => {
     setNewStageStartDate(value)
-    if (value && task.sub_stages.length > 0) {
-      await maybeFillPrecedingEnd(task.sub_stages.length, value)
-    }
   }
 
-  const handleStageDateBlur = (
+  const handleNewStageStartBlur = async () => {
+    if (newStageStartDate) return
+
+    if (newStageDependency?.predecessorId) {
+      const suggestion = suggestedStartFromDependencyDraft(newStageDependency, effectiveTasksById)
+      if (suggestion) {
+        const chosen = await requestDate(
+          ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
+          suggestion.date,
+          ru.drawer.stageStartDate
+        )
+        if (chosen) setNewStageStartDate(chosen)
+      }
+      return
+    }
+
+    if (newStageInternalPredIds.length > 0) {
+      const suggestion = suggestedStartFromInternalStagePredIds(orderedStages, newStageInternalPredIds)
+      if (suggestion) {
+        const chosen = await requestDate(
+          ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
+          suggestion.date,
+          ru.drawer.stageStartDate
+        )
+        if (chosen) setNewStageStartDate(chosen)
+      }
+      return
+    }
+
+    const fill = stageNeedsFollowingStartFill(task.sub_stages, null)
+    if (!fill) return
+    const chosen = await requestDate(
+      ru.drawer.autoFillFollowingStartPrompt(fill.proposedStart, fill.preceding.name),
+      fill.proposedStart,
+      ru.drawer.stageStartDate
+    )
+    if (chosen) setNewStageStartDate(chosen)
+  }
+
+  const handleStageDateBlur = async (
     stageItem: SubStage,
     field: 'start_date' | 'end_date',
     rawValue: string,
@@ -351,10 +621,27 @@ export function TaskDrawer({ project, task }: Props) {
       field === 'start_date' ? (stageItem.start_date ?? '') : (planned.end_date ?? '')
     if (rawValue === savedValue) return
 
-    openStageShift(stageItem, stageIndex, {
+    if (field === 'start_date' && !rawValue && !stageItem.start_date) {
+      const fromDep = await offerDependencyStageStart(stageItem)
+      if (fromDep) {
+        if (isStagePlanned(stageItem)) {
+          openStageShift(stageItem, stageIndex, 'shift', fromDep)
+        } else {
+          await applyStageDatesSilently(stageItem, fromDep)
+        }
+        return
+      }
+    }
+
+    const nextDates = {
       start_date: field === 'start_date' ? rawValue || null : planned.start_date,
       end_date: field === 'end_date' ? rawValue || null : planned.end_date,
-    })
+    }
+    if (isStagePlanned(stageItem)) {
+      openStageShift(stageItem, stageIndex, 'shift', nextDates)
+    } else {
+      await applyStageDatesSilently(stageItem, nextDates)
+    }
   }
 
   const handleStagePredecessorsBlur = async (stageItem: SubStage, rawValue: string) => {
@@ -372,8 +659,125 @@ export function TaskDrawer({ project, task }: Props) {
     if (ids.length === current.length && ids.every((id, i) => id === current[i])) return
 
     setStagePredecessorError(null)
-    await api.updateSubStage(task.id, stageItem.id, { predecessor_stage_ids: ids })
-    await refreshProjectAfterSubStageChange(qc, project.id)
+    try {
+      await api.updateSubStage(task.id, stageItem.id, { predecessor_stage_ids: ids })
+      patchSubStageInProjectCache(qc, project.id, stageItem.id, { predecessor_stage_ids: ids })
+      await refreshProjectAfterSubStageChange(qc, project.id)
+      setStagePredecessorReset((n) => n + 1)
+
+      if (!stageItem.start_date && ids.length > 0) {
+        const nextStages = orderedStages.map((s) =>
+          s.id === stageItem.id ? { ...s, predecessor_stage_ids: ids } : s
+        )
+        const suggestion = suggestedStartFromInternalStagePredecessors(nextStages, stageItem.id)
+        if (suggestion) {
+          const chosen = await requestDate(
+            ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
+            suggestion.date,
+            ru.drawer.stageStartDate
+          )
+          if (chosen) {
+            const dates = {
+              start_date: chosen,
+              end_date: stagePlannedDates(stageItem).end_date,
+            }
+            if (isStagePlanned(stageItem)) {
+              openStageShift(
+                stageItem,
+                orderedStages.findIndex((s) => s.id === stageItem.id),
+                'shift',
+                dates
+              )
+            } else {
+              await applyStageDatesSilently(stageItem, dates)
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setStagePredecessorError(stageItem.id)
+      setStagePredecessorReset((n) => n + 1)
+    }
+  }
+
+  const removeInternalStageLink = async (predStageId: number, succStageId: number) => {
+    const succ = orderedStages.find((s) => s.id === succStageId)
+    if (!succ) return
+    const preds = (succ.predecessor_stage_ids ?? []).filter((id) => id !== predStageId)
+    setInternalDepsBusy(true)
+    setInternalDepsError(null)
+    try {
+      await api.updateSubStage(task.id, succStageId, { predecessor_stage_ids: preds })
+      patchSubStageInProjectCache(qc, project.id, succStageId, { predecessor_stage_ids: preds })
+      await refreshProjectAfterSubStageChange(qc, project.id)
+      setStagePredecessorReset((n) => n + 1)
+    } catch (err) {
+      setInternalDepsError(
+        err instanceof Error ? err.message : ru.drawer.stageInternalDependencySaveError
+      )
+    } finally {
+      setInternalDepsBusy(false)
+    }
+  }
+
+  const openDeleteStage = (stageItem: SubStage, stageIndex: number) => {
+    const warnings = collectStageDeleteWarnings(
+      project,
+      task,
+      stageItem,
+      stageIndex,
+      orderedStages,
+      dependencyDrafts,
+      tasksById
+    )
+    setStageToDelete({ stage: stageItem, stageIndex, warnings })
+  }
+
+  const handleDeleteStageConfirm = async (comment: string | null) => {
+    if (!stageToDelete) return
+    const { stage: stageItem, stageIndex } = stageToDelete
+    const deletedNumber = stageDisplayNumber(stageIndex)
+    const tasksBefore = new Map(project.tasks.map((t) => [t.id, t]))
+    setDeletingStage(true)
+    try {
+      removeSubStageFromProjectCache(qc, project.id, stageItem.id)
+      await api.deleteSubStage(task.id, stageItem.id)
+      clearStageShift(task.id, stageItem.id)
+      clearTaskDateShifts(task.id)
+      const adjusted = adjustDependencyDraftsAfterStageDelete(dependencyDrafts, deletedNumber)
+      if (adjusted.length !== dependencyDrafts.length || dependencyDrafts.some((d, i) => d !== adjusted[i])) {
+        stageTaskChange(task, {
+          predecessor_refs: draftsToPredecessorRefs(adjusted, tasksById).join(', '),
+        })
+      }
+      setStageToDelete(null)
+      await refreshProjectAfterSubStageChange(qc, project.id, { beforeById: tasksBefore })
+
+      const updatedProject = qc.getQueryData<ProjectDetail>(['project', project.id])
+      const updatedTask = updatedProject?.tasks.find((t) => t.id === task.id)
+      if (updatedTask) {
+        pruneStageShiftsForTask(
+          task.id,
+          updatedTask.sub_stages.map((s) => s.id)
+        )
+        if (task.component_id) {
+          for (const usage of otherUsages) {
+            pruneStageShiftsForTask(
+              usage.id,
+              updatedTask.sub_stages.map((s) => s.id)
+            )
+          }
+        }
+      }
+
+      if (comment?.trim()) {
+        await api.addComment(task.id, `Удалён этап «${stageItem.name}»: ${comment.trim()}`)
+        await qc.invalidateQueries({ queryKey: ['comments', task.id] })
+        await qc.invalidateQueries({ queryKey: ['history', task.id] })
+      }
+    } finally {
+      setDeletingStage(false)
+    }
   }
 
   const addStage = async (e: FormEvent) => {
@@ -382,17 +786,36 @@ export function TaskDrawer({ project, task }: Props) {
     if (!name) return
     setAddingStage(true)
     try {
-      const startDate = resolveNewStageStartDate()
-      if (startDate && task.sub_stages.length > 0) {
-        await maybeFillPrecedingEnd(task.sub_stages.length, startDate)
-      }
-      await api.createSubStage(task.id, {
+      const startDate = newStageStartDate || null
+      const successorNumber = stageDisplayNumber(task.sub_stages.length)
+      const stageDepDraft = newStageDependency?.predecessorId
+        ? { ...newStageDependency, successorStageNumber: successorNumber }
+        : null
+      const createdStage = await api.createSubStage(task.id, {
         name,
         sort_order: task.sub_stages.length,
         start_date: startDate,
         end_date: newStageEndDate || null,
-        is_indicative: newStageIndicative,
+        is_indicative: false,
       })
+      patchSubStageInProjectCache(qc, project.id, createdStage.id, { is_indicative: false })
+      const internalPredIds = newStageInternalPredIds
+      if (internalPredIds.length > 0) {
+        await api.updateSubStage(task.id, createdStage.id, {
+          predecessor_stage_ids: internalPredIds,
+        })
+        patchSubStageInProjectCache(qc, project.id, createdStage.id, {
+          predecessor_stage_ids: internalPredIds,
+        })
+      }
+      if (stageDepDraft) {
+        stageTaskChange(task, {
+          predecessor_refs: draftsToPredecessorRefs(
+            [...dependencyDrafts, stageDepDraft],
+            tasksById
+          ).join(', '),
+        })
+      }
       if (saveTemplateForReuse && selectedTemplate === CUSTOM_STAGE_VALUE) {
         await api.addStageTemplate(project.id, { name, full_label: name })
         await qc.invalidateQueries({ queryKey: ['stage-templates', project.id] })
@@ -400,10 +823,45 @@ export function TaskDrawer({ project, task }: Props) {
       setNewStageName('')
       setNewStageStartDate('')
       setNewStageEndDate('')
-      setNewStageIndicative(false)
+      setNewStageDependency(null)
+      setNewStageInternalPredIds([])
       setSelectedTemplate('')
       setSaveTemplateForReuse(false)
       await refreshProjectAfterSubStageChange(qc, project.id)
+
+      const newStageIndex = successorNumber - 1
+      const refreshedProject = qc.getQueryData<ProjectDetail>(['project', project.id])
+      const refreshedTask = refreshedProject?.tasks.find((t) => t.id === task.id)
+      const newStageItem =
+        refreshedTask?.sub_stages.find((s) => s.id === createdStage.id) ??
+        sortedSubStages(refreshedTask?.sub_stages ?? [])[newStageIndex]
+
+      if (stageDepDraft && !startDate && newStageItem) {
+        await offerAutofillForDependencyDraft(
+          stageDepDraft,
+          { stageItem: newStageItem, stageIndex: newStageIndex },
+          { silent: true }
+        )
+      } else if (internalPredIds.length > 0 && !startDate && newStageItem) {
+        const nextStages = [
+          ...orderedStages,
+          { ...createdStage, predecessor_stage_ids: internalPredIds },
+        ]
+        const suggestion = suggestedStartFromInternalStagePredecessors(nextStages, createdStage.id)
+        if (suggestion) {
+          const chosen = await requestDate(
+            ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
+            suggestion.date,
+            ru.drawer.stageStartDate
+          )
+          if (chosen) {
+            await applyStageDatesSilently(newStageItem, {
+              start_date: chosen,
+              end_date: stagePlannedDates(newStageItem).end_date,
+            })
+          }
+        }
+      }
     } finally {
       setAddingStage(false)
     }
@@ -462,7 +920,8 @@ export function TaskDrawer({ project, task }: Props) {
     )
   }
 
-  const indicativeFromStages = task.sub_stages.length > 0
+  const indicativeFromStages = task.sub_stages.some(isStagePlanned)
+  const hasPlannedStages = indicativeFromStages
   const effortKAn = effective.custom_fields?.[EFFORT_K_AN_KEY] ?? String(DEFAULT_K_AN)
   const effortKDev = effective.custom_fields?.[EFFORT_K_DEV_KEY] ?? String(DEFAULT_K_DEV)
   const effortKMa = effective.custom_fields?.[EFFORT_K_MA_KEY] ?? String(DEFAULT_K_MA)
@@ -666,16 +1125,15 @@ export function TaskDrawer({ project, task }: Props) {
             )}
             <h3>
               Этапы
-              {task.sub_stages.length > 0 && (
+              {hasPlannedStages && (
                 <button className="btn-small" onClick={completeAll}>
                   {ru.drawer.markAllDone}
                 </button>
               )}
             </h3>
-            <p className="muted stage-predecessors-hint">{ru.drawer.stagePredecessorsHint}</p>
             <ul className="checklist phase-checklist">
               {orderedStages.map((s, stageIndex) => (
-                <li key={s.id} className={s.is_indicative ? 'indicative-phase' : ''}>
+                <li key={s.id} className={isStagePlanned(s) ? 'indicative-phase' : 'unplanned-phase'}>
                   <div className="phase-row-header">
                     <span className={`phase-title ${s.is_done ? 'done' : ''}`}>
                       <span className="phase-number">{stageDisplayNumber(stageIndex)}.</span>
@@ -683,30 +1141,65 @@ export function TaskDrawer({ project, task }: Props) {
                       {s.name}
                     </span>
                     <div className="phase-actions">
-                      {s.is_done ? (
-                        <button
-                          type="button"
-                          className="btn-link"
-                          onClick={() => void toggleStage(s)}
-                        >
-                          {ru.drawer.unmarkStage}
-                        </button>
+                      {!isStagePlanned(s) ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-small"
+                            onClick={() => void openStagePlanWithAutoFill(s, stageIndex)}
+                          >
+                            {ru.drawer.stagePlan}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-small btn-save-quiet"
+                            onClick={() => void openStageCorrectWithAutoFill(s, stageIndex)}
+                          >
+                            {ru.drawer.stageCorrect}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-small btn-danger"
+                            onClick={() => openDeleteStage(s, stageIndex)}
+                          >
+                            {ru.deleteStage.deleteStage}
+                          </button>
+                        </>
                       ) : (
-                        <button
-                          type="button"
-                          className="btn-small"
-                          onClick={() => setCompletingStage(s)}
-                        >
-                          {ru.drawer.stageDone}
-                        </button>
+                        <>
+                          {s.is_done ? (
+                            <button
+                              type="button"
+                              className="btn-link"
+                              onClick={() => void toggleStage(s)}
+                            >
+                              {ru.drawer.unmarkStage}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn-small"
+                              onClick={() => setCompletingStage(s)}
+                            >
+                              {ru.drawer.stageDone}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn-small btn-save-quiet"
+                            onClick={() => void openStageShiftWithAutoFill(s, stageIndex)}
+                          >
+                            {ru.drawer.stageShift}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-small btn-danger"
+                            onClick={() => openDeleteStage(s, stageIndex)}
+                          >
+                            {ru.deleteStage.deleteStage}
+                          </button>
+                        </>
                       )}
-                      <button
-                        type="button"
-                        className="btn-small btn-save-quiet"
-                        onClick={() => openStageShift(s, stageIndex)}
-                      >
-                        {ru.drawer.stageShift}
-                      </button>
                     </div>
                   </div>
                   <div className="phase-meta">
@@ -718,6 +1211,22 @@ export function TaskDrawer({ project, task }: Props) {
                         defaultValue={s.start_date ?? ''}
                         onBlur={(e) => handleStageDateBlur(s, 'start_date', e.target.value, stageIndex)}
                       />
+                      {(() => {
+                        const hint = stageNeedsDependencyStartFill(
+                          project,
+                          task,
+                          s,
+                          effectiveTasksById,
+                          dependencyDrafts,
+                          s.start_date,
+                          dependencyDraftsAuthoritative
+                        )
+                        return hint ? (
+                          <span className="dependency-start-hint muted">
+                            {ru.drawer.dependencyStartHint(hint.label, hint.date)}
+                          </span>
+                        ) : null
+                      })()}
                     </label>
                     <label className="phase-date-field">
                       <span>{ru.drawer.stageEndDate}</span>
@@ -755,6 +1264,12 @@ export function TaskDrawer({ project, task }: Props) {
               ))}
               {!task.sub_stages.length && <li className="muted">{ru.drawer.noStages}</li>}
             </ul>
+            <StageInternalDependenciesEditor
+              stages={orderedStages}
+              busy={internalDepsBusy}
+              saveError={internalDepsError}
+              onRemove={removeInternalStageLink}
+            />
             <form className="add-stage-form" onSubmit={addStage}>
               <label>
                 {ru.drawer.pickFromTemplate}
@@ -789,13 +1304,51 @@ export function TaskDrawer({ project, task }: Props) {
                   {ru.drawer.saveForReuse}
                 </label>
               )}
+              <NewStageDependencyFields
+                stageName={newStageName}
+                stageNumber={stageDisplayNumber(task.sub_stages.length)}
+                existingStages={orderedStages}
+                tasks={project.tasks}
+                currentTaskId={task.id}
+                crossTaskValue={newStageDependency}
+                onCrossTaskChange={setNewStageDependency}
+                internalPredStageIds={newStageInternalPredIds}
+                onInternalPredChange={setNewStageInternalPredIds}
+              />
               <label>
                 {ru.drawer.stageStartDate}
                 <input
                   type="date"
                   value={newStageStartDate}
-                  onChange={(e) => void handleNewStageStartChange(e.target.value)}
+                  onChange={(e) => handleNewStageStartChange(e.target.value)}
+                  onBlur={() => void handleNewStageStartBlur()}
                 />
+                {(() => {
+                  if (newStageStartDate) return null
+                  if (newStageDependency?.predecessorId) {
+                    const hint = suggestedStartFromDependencyDraft(
+                      newStageDependency,
+                      effectiveTasksById
+                    )
+                    return hint ? (
+                      <span className="dependency-start-hint muted">
+                        {ru.drawer.dependencyStartHint(hint.label, hint.date)}
+                      </span>
+                    ) : null
+                  }
+                  if (newStageInternalPredIds.length > 0) {
+                    const hint = suggestedStartFromInternalStagePredIds(
+                      orderedStages,
+                      newStageInternalPredIds
+                    )
+                    return hint ? (
+                      <span className="dependency-start-hint muted">
+                        {ru.drawer.dependencyStartHint(hint.label, hint.date)}
+                      </span>
+                    ) : null
+                  }
+                  return null
+                })()}
               </label>
               <label>
                 {ru.drawer.stageEndDate}
@@ -805,18 +1358,17 @@ export function TaskDrawer({ project, task }: Props) {
                   onChange={(e) => setNewStageEndDate(e.target.value)}
                 />
               </label>
-              <label className="toggle inline-toggle">
-                <input
-                  type="checkbox"
-                  checked={newStageIndicative}
-                  onChange={(e) => setNewStageIndicative(e.target.checked)}
-                />
-                {ru.drawer.stageIndicative}
-              </label>
               <button type="submit" className="btn-small" disabled={addingStage || !newStageName.trim()}>
                 {addingStage ? ru.drawer.addingStage : ru.drawer.addStage}
               </button>
             </form>
+            <TaskDependenciesEditor
+              task={effective}
+              tasks={project.tasks}
+              drafts={dependencyDrafts}
+              onChange={handleDependencyDraftsChange}
+              onDraftConfigured={(draft) => void offerAutofillForDependencyDraft(draft)}
+            />
             {renderTabComment('stages')}
           </section>
         )}
@@ -1032,13 +1584,46 @@ export function TaskDrawer({ project, task }: Props) {
                   type="date"
                   key={`start-${effective.start_date}`}
                   defaultValue={effective.start_date ?? ''}
-                  onBlur={(e) =>
+                  onBlur={async (e) => {
+                    let start = e.target.value || null
+                    if (!start && !effective.start_date) {
+                      const fill = taskNeedsDependencyStartFill(
+                        project,
+                        task,
+                        effectiveTasksById,
+                        dependencyDrafts,
+                        effective.start_date,
+                        dependencyDraftsAuthoritative
+                      )
+                      if (fill) {
+                        start = await requestDate(
+                          ru.drawer.autoFillFromTaskDependencyPrompt(fill.label, fill.date),
+                          fill.date,
+                          ru.drawer.stageStartDate
+                        )
+                      }
+                    }
                     stageTaskChange(task, {
-                      start_date: e.target.value || null,
+                      start_date: start,
                       end_date: effective.end_date,
                     })
-                  }
+                  }}
                 />
+                {(() => {
+                  const hint = taskNeedsDependencyStartFill(
+                    project,
+                    task,
+                    effectiveTasksById,
+                    dependencyDrafts,
+                    effective.start_date,
+                    dependencyDraftsAuthoritative
+                  )
+                  return hint ? (
+                    <span className="dependency-start-hint muted">
+                      {ru.drawer.dependencyStartHint(hint.label, hint.date)}
+                    </span>
+                  ) : null
+                })()}
               </label>
               <label>
                 Окончание (факт)
@@ -1165,9 +1750,21 @@ export function TaskDrawer({ project, task }: Props) {
       <StageShiftModal
         stage={shiftingStage.stage}
         initial={shiftingStage.initial}
+        mode={shiftingStage.mode}
         onCancel={cancelStageShift}
         onConfirm={handleStageShiftConfirm}
         submitting={shiftingStageSubmitting}
+      />
+    )}
+    {dateAutoFillModal}
+    {stageToDelete && (
+      <DeleteStageModal
+        stageName={stageToDelete.stage.name}
+        isDone={stageToDelete.stage.is_done}
+        warnings={stageToDelete.warnings}
+        onCancel={() => setStageToDelete(null)}
+        onConfirm={handleDeleteStageConfirm}
+        deleting={deletingStage}
       />
     )}
   </>

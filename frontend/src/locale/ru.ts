@@ -217,7 +217,7 @@ export const ru = {
     sharedSource: 'Общий',
     indicativeHint: 'Индикативное окончание',
     predecessors: 'Предшественники',
-    predecessorsPlaceholder: 'Названия задач через запятую',
+    predecessorsPlaceholder: 'Задача, Задача:2, Задача:2>3 (этапы через : и >)',
     delete: 'Удалить',
     deleteTask: 'Удалить задачу',
     deletingTask: 'Удаление…',
@@ -268,6 +268,8 @@ export const ru = {
     markAllDone: 'Отметить все выполненными',
     stageDone: 'Выполнено',
     stageShift: 'Сдвиг',
+    stagePlan: 'Запланировать',
+    stageCorrect: 'Скорректировать',
     unmarkStage: 'Снять отметку',
     addStage: '+ Добавить этап',
     pickFromTemplate: 'Этап из шаблона',
@@ -283,14 +285,63 @@ export const ru = {
     stageEndDate: 'Окончание',
     stagePredecessors: 'Предшественники',
     stagePredecessorsPlaceholder: 'номера этапов через запятую, напр. 1, 2',
-    stagePredecessorsHint: 'Этап начнётся после завершения указанных этапов (по номеру в списке).',
+    stagePredecessorsHint:
+      'Можно указать номера в поле этапа или добавить связь в блоке ниже. На Gantt — фиолетовые стрелки между этапами.',
     stagePredecessorsInvalid: 'Укажите номера этапов через запятую (например: 1, 2)',
+    stageInternalDependencies: 'Зависимости между этапами (внутри задачи)',
+    stageInternalDependenciesHint:
+      'Этап-последователь начинается после окончания этапа-предшественника. Отображается на Gantt фиолетовой стрелкой.',
+    stageInternalDependenciesEmpty:
+      'Нет связей между этапами. Укажите предшественников в карточке этапа или при добавлении нового этапа.',
+    stageInternalDependencyAdd: '+ Добавить связь',
+    stageInternalDependencyRemove: 'Удалить',
+    stageInternalDependencyPred: 'Этап-предшественник',
+    stageInternalDependencySucc: 'Зависимый этап',
+    stageInternalDependencyPickStage: 'Выберите этап',
+    stageInternalDependencyPickBoth: 'Выберите предшественников и зависимый этап',
+    stageInternalDependencySameStage: 'Этап не может зависеть от самого себя',
+    stageInternalDependencyDuplicate: 'Такая связь уже есть',
+    stageInternalDependencySaveError: 'Не удалось сохранить связь между этапами',
+    stageInternalDependencyLabel: (
+      predNum: number,
+      predName: string,
+      succNum: number,
+      succName: string
+    ) => `${predNum}. ${predName} → ${succNum}. ${succName}`,
+    taskDependencies: 'Зависимости от других задач',
+    taskDependenciesHint:
+      'Связь между задачами проекта. Для порядка этапов внутри этой задачи используйте блок выше.',
+    taskDependenciesEmpty: 'Нет зависимостей от других задач.',
+    taskDependencyAdd: '+ Добавить зависимость',
+    taskDependencyRemove: 'Удалить',
+    taskDependencyPredecessor: 'Предшественник',
+    taskDependencyPickTask: 'Выберите задачу',
+    taskDependencyPredStage: 'Этап предшественника',
+    taskDependencySuccStage: 'Этап этой задачи',
+    taskDependencyWholeTask: 'Вся задача',
+    taskDependencyType: 'Тип',
+    newStageDependencyEnable: 'Зависит от другой задачи',
+    newStageInternalPredecessors: 'После этапов',
+    newStageInternalPredecessorsHint:
+      'Выберите один или несколько этапов (Cmd/Ctrl + клик). Новый этап начнётся после их завершения.',
+    stagePredecessorPickerEmpty: 'Не выбрано — новый этап не привязан к порядку внутри задачи.',
+    newStageInternalDependencyEnable: 'Зависит от этапа этой задачи',
+    newStageInternalDependencyHint:
+      'Новый этап начнётся после выбранного. Связь сохранится вместе с этапом.',
+    newStageDependencyHint: 'Зависимость можно указать до проставления сроков этапа.',
+    newStageDependencyPendingName: 'новый этап',
+    newStageDependencyNoTasks: 'В проекте нет других задач для зависимости.',
     stageDueDate: 'Срок',
-    indicativeFromStages: 'Считается автоматически по датам этапов (мин. начало, макс. окончание)',
-    autoFillPrecedingEnd: (endDate: string, stageName: string) =>
-      `У этапа «${stageName}» не указано окончание. Установить окончание на ${endDate} (день перед началом следующего этапа)?`,
-    autoFillFollowingStart: (startDate: string, stageName: string) =>
-      `Не указано начало нового этапа. Установить начало на ${startDate} (день после окончания этапа «${stageName}»)?`,
+    indicativeFromStages:
+      'Считается автоматически по запланированным этапам (мин. начало, макс. окончание)',
+    autoFillPrecedingEndPrompt: (endDate: string, stageName: string) =>
+      `У этапа «${stageName}» не указано окончание. Рекомендуется ${endDate} (день перед началом следующего этапа).`,
+    autoFillFollowingStartPrompt: (startDate: string, stageName: string) =>
+      `Не указано начало нового этапа. Рекомендуется ${startDate} (день после окончания этапа «${stageName}»).`,
+    autoFillFromTaskDependencyPrompt: (sourceLabel: string, date: string) =>
+      `Не указано начало. По зависимости от «${sourceLabel}» рекомендуется ${date} (день после окончания).`,
+    dependencyStartHint: (sourceLabel: string, date: string) =>
+      `Рекомендуемое начало: ${date} (день после окончания «${sourceLabel}»)`,
     stageIndicative: 'Индикативный',
     addingStage: 'Добавление…',
     noStages: 'Нет этапов',
@@ -359,14 +410,55 @@ export const ru = {
     submitting: 'Сохранение…',
   },
 
+  dateAutoFill: {
+    title: 'Автозаполнение даты',
+    suggestedDate: 'Рекомендуемая дата',
+    dateLabel: 'Дата',
+    fill: 'Заполнить',
+    fillManually: 'Заполнить вручную',
+    apply: 'Применить',
+    cancel: 'Отмена',
+    invalidDate: 'Укажите дату',
+  },
+
+  deleteStage: {
+    title: (name: string) => `Удалить этап «${name}»?`,
+    message: 'Этап будет удалён безвозвратно.',
+    doneTitle: 'Этап отмечен как выполненный',
+    doneHint:
+      'После удаления пересчитаются индикативные сроки задачи, а фактические даты (по выполненным этапам) будут обновлены или сброшены. Укажите причину удаления.',
+    comment: 'Комментарий к удалению',
+    commentRequired: 'Для удаления выполненного этапа укажите комментарий',
+    commentPlaceholder: 'Почему удаляете выполненный этап?',
+    warningsTitle: 'Связанные зависимости',
+    warningsNote: 'Эти зависимости будут удалены или обновлены автоматически.',
+    confirm: 'Удалить этап',
+    cancel: 'Отмена',
+    deleting: 'Удаление…',
+    deleteStage: 'Удалить',
+  },
+
   stageShift: {
     title: (name: string) => `Сдвиг этапа: «${name}»`,
     subtitle: 'Укажите новые даты и комментарий. Сдвиг отобразится на диаграмме Ганта; индикативные сроки обновятся, если на них влияет изменение.',
+    planTitle: (name: string) => `Планирование этапа: «${name}»`,
+    planSubtitle:
+      'Укажите сроки этапа. Он появится на диаграмме Ганта и обновит индикативные сроки задачи.',
     comment: 'Комментарий к сдвигу',
+    planComment: 'Комментарий к планированию',
     commentRequired: 'Укажите комментарий к сдвигу',
+    planCommentRequired: 'Укажите комментарий к планированию',
     commentPlaceholder: 'Почему перенесли сроки этапа?',
+    planCommentPlaceholder: 'Почему выбраны такие сроки?',
     datesUnchanged: 'Измените хотя бы одну дату или отмените действие',
     confirm: 'Сохранить сдвиг',
+    planConfirm: 'Запланировать',
+    correctTitle: (name: string) => `Корректировка сроков: «${name}»`,
+    correctSubtitle:
+      'Измените черновые сроки этапа. На диаграмму и индикатив это не повлияет, пока этап не запланирован.',
+    correctComment: 'Комментарий (необязательно)',
+    correctCommentPlaceholder: 'При необходимости поясните изменение сроков',
+    correctConfirm: 'Сохранить',
     cancel: 'Отмена',
     submitting: 'Сохранение…',
   },

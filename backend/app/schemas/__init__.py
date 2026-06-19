@@ -71,6 +71,8 @@ class SubStageOut(SubStageBase):
 class DependencyBase(BaseModel):
     predecessor_id: int
     successor_id: int
+    predecessor_stage_id: int | None = None
+    successor_stage_id: int | None = None
     type: DependencyType = DependencyType.FS
     lag_days: int = 0
 
@@ -173,6 +175,12 @@ class PredecessorRef(BaseModel):
     id: int
     name: str
     type: DependencyType
+    predecessor_stage_id: int | None = None
+    predecessor_stage_name: str | None = None
+    predecessor_stage_number: int | None = None
+    successor_stage_id: int | None = None
+    successor_stage_name: str | None = None
+    successor_stage_number: int | None = None
 
 
 class TaskOut(TaskBase):
