@@ -8,11 +8,34 @@ const SERVER_MANAGED_STAGE_FIELDS = [
   'end_date',
   'duration_days',
   'completion_pct',
+  'status',
   'indicative_start',
   'indicative_end',
 ] as const
 
-/** Immediately reflect a sub-stage patch in the project query cache (all tasks sharing the stage). */
+/** Apply task payload from internal-links API (sub_stages + internal_stage_links). */
+export function applyTaskInternalLinksUpdate(
+  qc: QueryClient,
+  projectId: number,
+  updated: Task
+): void {
+  qc.setQueryData<ProjectDetail>(['project', projectId], (old) => {
+    if (!old) return old
+    return {
+      ...old,
+      tasks: old.tasks.map((t) =>
+        t.id === updated.id
+          ? {
+              ...t,
+              internal_stage_links: updated.internal_stage_links,
+              sub_stages: updated.sub_stages,
+            }
+          : t
+      ),
+    }
+  })
+}
+
 export function patchSubStageInProjectCache(
   qc: QueryClient,
   projectId: number,

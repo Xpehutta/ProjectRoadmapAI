@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models import Dependency, ProjectComponent, Task
 from app.schemas import PredecessorRef, TaskOut
 from app.services.component_merge import effective_sub_stages, merge_task_fields
+from app.services.stage_internal_links import effective_internal_stage_links
 from app.services.task_dependency_refs import stage_meta
 
 
@@ -34,6 +35,7 @@ def task_to_out(task: Task, db: Session | None = None) -> TaskOut:
         ind_start, ind_end = indicative_dates_from_stage_outs(sub_stages)
         merged["indicative_start"] = ind_start
         merged["indicative_end"] = ind_end
+    internal_links = effective_internal_stage_links(task, list(task.component.sub_stages or []) if task.component_id and task.component else list(task.sub_stages or []))
     return TaskOut(
         id=task.id,
         project_id=task.project_id,
@@ -81,6 +83,7 @@ def task_to_out(task: Task, db: Session | None = None) -> TaskOut:
         component_usage_count=merged["component_usage_count"],
         sub_stages=sub_stages,
         predecessors=preds,
+        internal_stage_links=internal_links,
     )
 
 

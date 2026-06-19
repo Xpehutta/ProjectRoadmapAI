@@ -2,6 +2,10 @@ import type { DependencyType, SubStage, Task } from '../types'
 import { ru } from '../locale/ru'
 import { InternalStagePredecessorPicker } from './InternalStagePredecessorPicker'
 import { stageOptions, type TaskDependencyDraft } from '../utils/taskDependencyRefs'
+import {
+  stageOptionsForInternalDeps,
+  type StageFocusDependency,
+} from '../utils/stageInternalDeps'
 
 const DEP_TYPES: DependencyType[] = ['FS', 'SS', 'FF', 'SF']
 
@@ -13,8 +17,8 @@ interface Props {
   currentTaskId: number
   crossTaskValue: TaskDependencyDraft | null
   onCrossTaskChange: (value: TaskDependencyDraft | null) => void
-  internalPredStageIds: number[]
-  onInternalPredChange: (stageIds: number[]) => void
+  internalDeps: StageFocusDependency[]
+  onInternalDepsChange: (deps: StageFocusDependency[]) => void
 }
 
 function emptyDraft(predecessorId: number, stageNumber: number): TaskDependencyDraft {
@@ -34,8 +38,8 @@ export function NewStageDependencyFields({
   currentTaskId,
   crossTaskValue,
   onCrossTaskChange,
-  internalPredStageIds,
-  onInternalPredChange,
+  internalDeps,
+  onInternalDepsChange,
 }: Props) {
   const otherTasks = tasks.filter((t) => t.id !== currentTaskId)
   const crossTaskEnabled = crossTaskValue !== null
@@ -43,23 +47,67 @@ export function NewStageDependencyFields({
   const predTask = tasks.find((t) => t.id === crossTaskDraft.predecessorId)
   const predStageOptions = predTask ? stageOptions(predTask.sub_stages ?? []) : []
   const successorLabel = `${stageNumber}. ${stageName.trim() || ru.drawer.newStageDependencyPendingName}`
+  const stageOptionsList = stageOptionsForInternalDeps(existingStages)
+  const selectedIds = internalDeps.map((d) => d.refStageId)
 
   const updateCrossTask = (patch: Partial<TaskDependencyDraft>) => {
     onCrossTaskChange({ ...crossTaskDraft, ...patch, successorStageNumber: stageNumber })
   }
 
+  const handleInternalSelectionChange = (ids: number[]) => {
+    const byId = new Map(internalDeps.map((d) => [d.refStageId, d.relation]))
+    onInternalDepsChange(
+      ids.map((id) => ({ refStageId: id, relation: byId.get(id) ?? 'after' }))
+    )
+  }
+
+  const updateInternalRelation = (refStageId: number, relation: StageFocusDependency['relation']) => {
+    onInternalDepsChange(
+      internalDeps.map((d) => (d.refStageId === refStageId ? { ...d, relation } : d))
+    )
+  }
+
+  const labelForRef = (refStageId: number) =>
+    stageOptionsList.find((o) => o.id === refStageId)?.label ?? String(refStageId)
+
   return (
     <>
       {existingStages.length > 0 && (
-        <label className="stage-predecessor-select-field">
-          <span>{ru.drawer.newStageInternalPredecessors}</span>
-          <InternalStagePredecessorPicker
-            stages={existingStages}
-            selectedIds={internalPredStageIds}
-            onChange={onInternalPredChange}
-            variant="select"
-          />
-        </label>
+        <div className="new-stage-internal-deps">
+          <label className="stage-predecessor-select-field">
+            <span>{ru.drawer.newStageInternalPredecessors}</span>
+            <InternalStagePredecessorPicker
+              stages={existingStages}
+              selectedIds={selectedIds}
+              onChange={handleInternalSelectionChange}
+              variant="select"
+            />
+          </label>
+          {internalDeps.length > 0 && (
+            <ul className="stage-focus-deps-list new-stage-internal-dep-types">
+              {internalDeps.map((dep) => (
+                <li key={dep.refStageId} className="stage-focus-dep-item">
+                  <span className="stage-focus-dep-ref">{labelForRef(dep.refStageId)}</span>
+                  <label className="stage-focus-dep-type">
+                    <span>{ru.drawer.stageInternalDependencyType}</span>
+                    <select
+                      value={dep.relation}
+                      onChange={(e) =>
+                        updateInternalRelation(
+                          dep.refStageId,
+                          e.target.value as StageFocusDependency['relation']
+                        )
+                      }
+                    >
+                      <option value="after">{ru.drawer.newStageInternalRelationAfter}</option>
+                      <option value="before">{ru.drawer.newStageInternalRelationBefore}</option>
+                    </select>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       <div className="new-stage-dependency-fields">

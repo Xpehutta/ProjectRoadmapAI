@@ -2,6 +2,8 @@ from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import AuditEventType, DependencyType, Moscow, ReleaseStatus, TaskStatus
@@ -66,6 +68,16 @@ class SubStageOut(SubStageBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     task_id: int
+
+
+class StageInternalLinkOut(BaseModel):
+    first_stage_id: int
+    second_stage_id: int
+    relation: Literal["after", "before"]
+
+
+class StageInternalLinksUpdate(BaseModel):
+    links: list[StageInternalLinkOut] = Field(default_factory=list)
 
 
 class DependencyBase(BaseModel):
@@ -195,6 +207,7 @@ class TaskOut(TaskBase):
     component_usage_count: int = 0
     sub_stages: list[SubStageOut] = []
     predecessors: list[PredecessorRef] = []
+    internal_stage_links: list[StageInternalLinkOut] = Field(default_factory=list)
 
 
 class TaskPatchResponse(BaseModel):

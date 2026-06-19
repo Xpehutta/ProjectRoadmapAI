@@ -27,6 +27,7 @@ import {
   refreshProjectAfterSubStageChange,
   patchSubStageInProjectCache,
   removeSubStageFromProjectCache,
+  applyTaskInternalLinksUpdate,
 } from '../utils/subStageRefresh'
 import {
   sortedSubStages,
@@ -34,12 +35,7 @@ import {
   stageNeedsFollowingStartFill,
   stageNeedsPrecedingEndFill,
 } from '../utils/subStageDates'
-import {
-  formatStagePredecessorLabels,
-  formatStagePredecessorNumbers,
-  parseStagePredecessorNumbers,
-  stageDisplayNumber,
-} from '../utils/subStageDeps'
+import { stageDisplayNumber } from '../utils/subStageDeps'
 import { indicativeRangeChanged, buildStageShiftEntry, stageDatesChanged, stagePlannedDates, isStagePlanned } from '../utils/stageComplete'
 import {
   mergeTaskCustomFields,
@@ -60,7 +56,7 @@ import {
 } from '../utils/effortCalculator'
 import { PlannedEffortCalculator } from './PlannedEffortCalculator'
 import { NewStageDependencyFields } from './NewStageDependencyFields'
-import { StageInternalDependenciesEditor } from './StageInternalDependenciesEditor'
+import { StageFocusDependenciesEditor } from './StageFocusDependenciesEditor'
 import { TaskDependenciesEditor } from './TaskDependenciesEditor'
 import {
   draftsFromPredecessors,
@@ -78,7 +74,14 @@ import {
   collectStageDeleteWarnings,
   type StageDeleteWarning,
 } from '../utils/stageDeleteWarnings'
-import { suggestedStartFromInternalStagePredIds, suggestedStartFromInternalStagePredecessors } from '../utils/stageInternalDeps'
+import {
+  effectiveInternalStageLinks,
+  mergeDependenciesForNewStage,
+  replaceDependenciesForFocusStage,
+  suggestedStartFromInternalStagePredIds,
+  suggestedStartFromInternalStagePredecessors,
+  type StageFocusDependency,
+} from '../utils/stageInternalDeps'
 
 interface Props {
   project: ProjectDetail
@@ -107,7 +110,7 @@ export function TaskDrawer({ project, task }: Props) {
   const [newStageStartDate, setNewStageStartDate] = useState('')
   const [newStageEndDate, setNewStageEndDate] = useState('')
   const [newStageDependency, setNewStageDependency] = useState<TaskDependencyDraft | null>(null)
-  const [newStageInternalPredIds, setNewStageInternalPredIds] = useState<number[]>([])
+  const [newStageInternalDeps, setNewStageInternalDeps] = useState<StageFocusDependency[]>([])
   const [addingStage, setAddingStage] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [saveTemplateForReuse, setSaveTemplateForReuse] = useState(false)
@@ -121,16 +124,17 @@ export function TaskDrawer({ project, task }: Props) {
   } | null>(null)
   const [shiftingStageSubmitting, setShiftingStageSubmitting] = useState(false)
   const [stageDateInputReset, setStageDateInputReset] = useState(0)
-  const [stagePredecessorReset, setStagePredecessorReset] = useState(0)
-  const [stagePredecessorError, setStagePredecessorError] = useState<number | null>(null)
+  const [internalLinksBusy, setInternalLinksBusy] = useState<number | null>(null)
+  const [internalLinksError, setInternalLinksError] = useState<{
+    stageId: number
+    message: string
+  } | null>(null)
   const [stageToDelete, setStageToDelete] = useState<{
     stage: SubStage
     stageIndex: number
     warnings: StageDeleteWarning[]
   } | null>(null)
   const [deletingStage, setDeletingStage] = useState(false)
-  const [internalDepsBusy, setInternalDepsBusy] = useState(false)
-  const [internalDepsError, setInternalDepsError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TaskDrawerTab>('general')
   const [plannedEffortInputKey, setPlannedEffortInputKey] = useState(0)
   const recordIndicativeShift = useSavedDateShiftsStore((s) => s.recordIndicativeShift)
@@ -151,6 +155,11 @@ export function TaskDrawer({ project, task }: Props) {
   )
 
   const orderedStages = useMemo(() => sortedSubStages(task.sub_stages), [task.sub_stages])
+
+  const effectiveInternalLinks = useMemo(
+    () => effectiveInternalStageLinks(task, orderedStages),
+    [task, orderedStages]
+  )
 
   const renderTemplateOptions = (templates: StageTemplate[] | undefined, sectionLabel: string) => {
     if (!templates?.length) return null
@@ -587,8 +596,11 @@ export function TaskDrawer({ project, task }: Props) {
       return
     }
 
-    if (newStageInternalPredIds.length > 0) {
-      const suggestion = suggestedStartFromInternalStagePredIds(orderedStages, newStageInternalPredIds)
+    const afterPredIds = newStageInternalDeps
+      .filter((d) => d.relation === 'after')
+      .map((d) => d.refStageId)
+    if (afterPredIds.length > 0) {
+      const suggestion = suggestedStartFromInternalStagePredIds(orderedStages, afterPredIds)
       if (suggestion) {
         const chosen = await requestDate(
           ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
@@ -644,32 +656,24 @@ export function TaskDrawer({ project, task }: Props) {
     }
   }
 
-  const handleStagePredecessorsBlur = async (stageItem: SubStage, rawValue: string) => {
-    const saved = formatStagePredecessorNumbers(stageItem, orderedStages)
-    if (rawValue.trim() === saved) return
-
-    const ids = parseStagePredecessorNumbers(rawValue, orderedStages, stageItem.id)
-    if (ids === null) {
-      setStagePredecessorError(stageItem.id)
-      setStagePredecessorReset((n) => n + 1)
-      return
-    }
-
-    const current = stageItem.predecessor_stage_ids ?? []
-    if (ids.length === current.length && ids.every((id, i) => id === current[i])) return
-
-    setStagePredecessorError(null)
+  const saveFocusStageDeps = async (stageItem: SubStage, deps: StageFocusDependency[]) => {
+    setInternalLinksBusy(stageItem.id)
+    setInternalLinksError(null)
     try {
-      await api.updateSubStage(task.id, stageItem.id, { predecessor_stage_ids: ids })
-      patchSubStageInProjectCache(qc, project.id, stageItem.id, { predecessor_stage_ids: ids })
+      const nextLinks = replaceDependenciesForFocusStage(
+        effectiveInternalLinks,
+        stageItem.id,
+        deps
+      )
+      const updated = await api.updateInternalStageLinks(task.id, nextLinks)
+      applyTaskInternalLinksUpdate(qc, project.id, updated)
       await refreshProjectAfterSubStageChange(qc, project.id)
-      setStagePredecessorReset((n) => n + 1)
 
-      if (!stageItem.start_date && ids.length > 0) {
-        const nextStages = orderedStages.map((s) =>
-          s.id === stageItem.id ? { ...s, predecessor_stage_ids: ids } : s
-        )
-        const suggestion = suggestedStartFromInternalStagePredecessors(nextStages, stageItem.id)
+      if (!stageItem.start_date && deps.some((d) => d.relation === 'after')) {
+        const refreshedProject = qc.getQueryData<ProjectDetail>(['project', project.id])
+        const refreshedTask = refreshedProject?.tasks.find((t) => t.id === task.id)
+        const stages = sortedSubStages(refreshedTask?.sub_stages ?? orderedStages)
+        const suggestion = suggestedStartFromInternalStagePredecessors(stages, stageItem.id)
         if (suggestion) {
           const chosen = await requestDate(
             ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
@@ -681,13 +685,9 @@ export function TaskDrawer({ project, task }: Props) {
               start_date: chosen,
               end_date: stagePlannedDates(stageItem).end_date,
             }
+            const stageIndex = stages.findIndex((s) => s.id === stageItem.id)
             if (isStagePlanned(stageItem)) {
-              openStageShift(
-                stageItem,
-                orderedStages.findIndex((s) => s.id === stageItem.id),
-                'shift',
-                dates
-              )
+              openStageShift(stageItem, stageIndex, 'shift', dates)
             } else {
               await applyStageDatesSilently(stageItem, dates)
             }
@@ -695,28 +695,12 @@ export function TaskDrawer({ project, task }: Props) {
         }
       }
     } catch (err) {
-      setStagePredecessorError(stageItem.id)
-      setStagePredecessorReset((n) => n + 1)
-    }
-  }
-
-  const removeInternalStageLink = async (predStageId: number, succStageId: number) => {
-    const succ = orderedStages.find((s) => s.id === succStageId)
-    if (!succ) return
-    const preds = (succ.predecessor_stage_ids ?? []).filter((id) => id !== predStageId)
-    setInternalDepsBusy(true)
-    setInternalDepsError(null)
-    try {
-      await api.updateSubStage(task.id, succStageId, { predecessor_stage_ids: preds })
-      patchSubStageInProjectCache(qc, project.id, succStageId, { predecessor_stage_ids: preds })
-      await refreshProjectAfterSubStageChange(qc, project.id)
-      setStagePredecessorReset((n) => n + 1)
-    } catch (err) {
-      setInternalDepsError(
-        err instanceof Error ? err.message : ru.drawer.stageInternalDependencySaveError
-      )
+      const message =
+        err instanceof Error ? err.message : ru.drawer.stageInternalLinkSaveError
+      setInternalLinksError({ stageId: stageItem.id, message })
+      throw err
     } finally {
-      setInternalDepsBusy(false)
+      setInternalLinksBusy(null)
     }
   }
 
@@ -799,14 +783,14 @@ export function TaskDrawer({ project, task }: Props) {
         is_indicative: false,
       })
       patchSubStageInProjectCache(qc, project.id, createdStage.id, { is_indicative: false })
-      const internalPredIds = newStageInternalPredIds
-      if (internalPredIds.length > 0) {
-        await api.updateSubStage(task.id, createdStage.id, {
-          predecessor_stage_ids: internalPredIds,
-        })
-        patchSubStageInProjectCache(qc, project.id, createdStage.id, {
-          predecessor_stage_ids: internalPredIds,
-        })
+      if (newStageInternalDeps.length > 0) {
+        const nextLinks = mergeDependenciesForNewStage(
+          effectiveInternalLinks,
+          createdStage.id,
+          newStageInternalDeps
+        )
+        const updated = await api.updateInternalStageLinks(task.id, nextLinks)
+        applyTaskInternalLinksUpdate(qc, project.id, updated)
       }
       if (stageDepDraft) {
         stageTaskChange(task, {
@@ -824,7 +808,7 @@ export function TaskDrawer({ project, task }: Props) {
       setNewStageStartDate('')
       setNewStageEndDate('')
       setNewStageDependency(null)
-      setNewStageInternalPredIds([])
+      setNewStageInternalDeps([])
       setSelectedTemplate('')
       setSaveTemplateForReuse(false)
       await refreshProjectAfterSubStageChange(qc, project.id)
@@ -842,12 +826,18 @@ export function TaskDrawer({ project, task }: Props) {
           { stageItem: newStageItem, stageIndex: newStageIndex },
           { silent: true }
         )
-      } else if (internalPredIds.length > 0 && !startDate && newStageItem) {
+      } else if (newStageInternalDeps.some((d) => d.relation === 'after') && !startDate && newStageItem) {
+        const afterPredIds = newStageInternalDeps
+          .filter((d) => d.relation === 'after')
+          .map((d) => d.refStageId)
         const nextStages = [
           ...orderedStages,
-          { ...createdStage, predecessor_stage_ids: internalPredIds },
+          {
+            ...newStageItem,
+            predecessor_stage_ids: afterPredIds,
+          },
         ]
-        const suggestion = suggestedStartFromInternalStagePredecessors(nextStages, createdStage.id)
+        const suggestion = suggestedStartFromInternalStagePredIds(nextStages, afterPredIds)
         if (suggestion) {
           const chosen = await requestDate(
             ru.drawer.autoFillFromTaskDependencyPrompt(suggestion.label, suggestion.date),
@@ -1090,9 +1080,9 @@ export function TaskDrawer({ project, task }: Props) {
           <section>
             <div className="completion-display drawer-tab-progress">
               <div className="progress-bar">
-                <div className="progress-fill" style={{ width: `${task.completion_pct}%` }} />
+                <div className="progress-fill" style={{ width: `${effective.completion_pct}%` }} />
               </div>
-              <span>{ru.drawer.complete(task.completion_pct)}</span>
+              <span>{ru.drawer.complete(effective.completion_pct)}</span>
             </div>
             <label>
               Индикативное начало
@@ -1240,36 +1230,23 @@ export function TaskDrawer({ project, task }: Props) {
                     {s.note && s.note !== stageEffectiveEndDate(s) && (
                       <span className="phase-note">{s.note}</span>
                     )}
-                    <label className="phase-date-field phase-predecessors-field">
-                      <span>{ru.drawer.stagePredecessors}</span>
-                      <input
-                        key={`${s.id}-pred-${(s.predecessor_stage_ids ?? []).join('-')}-${stagePredecessorReset}`}
-                        type="text"
-                        className={stagePredecessorError === s.id ? 'input-error' : undefined}
-                        defaultValue={formatStagePredecessorNumbers(s, orderedStages)}
-                        placeholder={ru.drawer.stagePredecessorsPlaceholder}
-                        onBlur={(e) => void handleStagePredecessorsBlur(s, e.target.value)}
-                      />
-                    </label>
-                    {(s.predecessor_stage_ids?.length ?? 0) > 0 && (
-                      <span className="phase-predecessors-label muted">
-                        {formatStagePredecessorLabels(s, orderedStages)}
-                      </span>
-                    )}
-                    {stagePredecessorError === s.id && (
-                      <span className="phase-predecessors-error">{ru.drawer.stagePredecessorsInvalid}</span>
-                    )}
+                    <StageFocusDependenciesEditor
+                      focusStageId={s.id}
+                      stages={orderedStages}
+                      links={effectiveInternalLinks}
+                      busy={internalLinksBusy === s.id}
+                      saveError={
+                        internalLinksError?.stageId === s.id
+                          ? internalLinksError.message
+                          : null
+                      }
+                      onSave={(deps) => saveFocusStageDeps(s, deps)}
+                    />
                   </div>
                 </li>
               ))}
               {!task.sub_stages.length && <li className="muted">{ru.drawer.noStages}</li>}
             </ul>
-            <StageInternalDependenciesEditor
-              stages={orderedStages}
-              busy={internalDepsBusy}
-              saveError={internalDepsError}
-              onRemove={removeInternalStageLink}
-            />
             <form className="add-stage-form" onSubmit={addStage}>
               <label>
                 {ru.drawer.pickFromTemplate}
@@ -1312,8 +1289,8 @@ export function TaskDrawer({ project, task }: Props) {
                 currentTaskId={task.id}
                 crossTaskValue={newStageDependency}
                 onCrossTaskChange={setNewStageDependency}
-                internalPredStageIds={newStageInternalPredIds}
-                onInternalPredChange={setNewStageInternalPredIds}
+                internalDeps={newStageInternalDeps}
+                onInternalDepsChange={setNewStageInternalDeps}
               />
               <label>
                 {ru.drawer.stageStartDate}
@@ -1336,10 +1313,12 @@ export function TaskDrawer({ project, task }: Props) {
                       </span>
                     ) : null
                   }
-                  if (newStageInternalPredIds.length > 0) {
+                  if (newStageInternalDeps.some((d) => d.relation === 'after')) {
                     const hint = suggestedStartFromInternalStagePredIds(
                       orderedStages,
-                      newStageInternalPredIds
+                      newStageInternalDeps
+                        .filter((d) => d.relation === 'after')
+                        .map((d) => d.refStageId)
                     )
                     return hint ? (
                       <span className="dependency-start-hint muted">

@@ -30,9 +30,31 @@ function withActualFromStages(task: Task, patch?: Record<string, unknown>): Task
 }
 
 function withCompletionFromStages(task: Task, patch?: Record<string, unknown>): Task {
-  if (!task.sub_stages?.length) return task
-  if (patch && 'completion_pct' in patch) return task
-  return { ...task, completion_pct: completionPctFromStages(task.sub_stages) }
+  const hasCompletionPending = patch && 'completion_pct' in patch
+  if (hasCompletionPending) return task
+  if (!task.sub_stages?.length) {
+    return task.completion_pct === 0 ? task : { ...task, completion_pct: 0 }
+  }
+  const completion_pct = completionPctFromStages(task.sub_stages)
+  return task.completion_pct === completion_pct ? task : { ...task, completion_pct }
+}
+
+function withStatusFromStages(task: Task, patch?: Record<string, unknown>): Task {
+  if (patch && 'status' in patch) return task
+  if (!task.sub_stages?.length) {
+    if (task.status === 'done') {
+      return { ...task, status: 'in_progress' }
+    }
+    return task
+  }
+  const completion_pct = completionPctFromStages(task.sub_stages)
+  if (completion_pct >= 100 && task.status !== 'done') {
+    return { ...task, status: 'done' }
+  }
+  if (completion_pct < 100 && task.status === 'done') {
+    return { ...task, status: 'in_progress' }
+  }
+  return task
 }
 
 function withIndicativeFromStages(task: Task, patch?: Record<string, unknown>): Task {
@@ -54,7 +76,8 @@ export function useEffectiveTasks(tasks: Task[]): Task[] {
       const effective = applyPendingToTask(t, patch)
       const withStages = withActualFromStages(effective, patch)
       const withCompletion = withCompletionFromStages(withStages, patch)
-      return withIndicativeFromStages(withCompletion, patch)
+      const withStatus = withStatusFromStages(withCompletion, patch)
+      return withIndicativeFromStages(withStatus, patch)
     })
   }, [tasks, taskChanges])
 }

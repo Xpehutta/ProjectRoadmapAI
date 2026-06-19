@@ -9,6 +9,7 @@ import type {
   ProjectDetail,
   Release,
   SubStage,
+  StageInternalLink,
   StageTemplate,
   StageTemplateLibrary,
   TableColumnLibrary,
@@ -173,6 +174,11 @@ export const api = {
     request<SubStage>(`/api/tasks/${taskId}/sub-stages`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  updateInternalStageLinks: (taskId: number, links: StageInternalLink[]) =>
+    request<Task>(`/api/tasks/${taskId}/sub-stages/internal-links`, {
+      method: 'PUT',
+      body: JSON.stringify({ links }),
     }),
   listComponents: (projectId: number) =>
     request<ProjectComponent[]>(`/api/projects/${projectId}/components`),

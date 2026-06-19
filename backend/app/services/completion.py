@@ -13,16 +13,20 @@ def recompute_completion(db: Session, task: Task) -> None:
         return
     stages = db.query(TaskSubStage).filter(TaskSubStage.task_id == task.id).all()
     if not stages:
-        return
-    done = sum(1 for s in stages if s.is_done)
-    new_pct = int(round(done / len(stages) * 100))
+        new_pct = 0
+    else:
+        done = sum(1 for s in stages if s.is_done)
+        new_pct = int(round(done / len(stages) * 100))
     if task.completion_pct != new_pct:
         log_change(db, task, AuditEventType.status, "completion_pct", task.completion_pct, new_pct)
         task.completion_pct = new_pct
-        if new_pct == 100:
+    if new_pct == 100:
+        if task.status != TaskStatus.done:
+            log_change(db, task, AuditEventType.status, "status", task.status.value, TaskStatus.done.value)
             task.status = TaskStatus.done
-        elif task.status == TaskStatus.done and new_pct < 100:
-            task.status = TaskStatus.in_progress
+    elif task.status == TaskStatus.done and new_pct < 100:
+        log_change(db, task, AuditEventType.status, "status", task.status.value, TaskStatus.in_progress.value)
+        task.status = TaskStatus.in_progress
 
 
 def complete_all_sub_stages(db: Session, task: Task) -> None:

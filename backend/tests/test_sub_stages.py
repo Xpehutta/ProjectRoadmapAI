@@ -198,7 +198,43 @@ def test_sub_stage_predecessor_ids(client):
     assert bad.status_code == 400
 
 
-def test_delete_sub_stage_cleans_internal_and_task_dependencies(client):
+def test_internal_stage_link_before_relation(client):
+    test_client, session, task = client
+    first = test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={"name": "Этап 1", "sort_order": 0},
+    ).json()
+    second = test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={"name": "Этап 2", "sort_order": 1},
+    ).json()
+
+    response = test_client.put(
+        f"/api/tasks/{task.id}/sub-stages/internal-links",
+        json={
+            "links": [
+                {
+                    "first_stage_id": first["id"],
+                    "second_stage_id": second["id"],
+                    "relation": "before",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["internal_stage_links"] == [
+        {
+            "first_stage_id": first["id"],
+            "second_stage_id": second["id"],
+            "relation": "before",
+        }
+    ]
+    stage1 = next(s for s in body["sub_stages"] if s["id"] == first["id"])
+    stage2 = next(s for s in body["sub_stages"] if s["id"] == second["id"])
+    assert stage1["predecessor_stage_ids"] == [second["id"]]
+    assert stage2["predecessor_stage_ids"] == []
+
     test_client, session, task = client
     from app.models import Dependency, Task
 
@@ -285,3 +321,33 @@ def test_delete_completed_stage_clears_actual_and_recomputes_indicative(client):
     assert task.indicative_start == date(2024, 4, 1)
     assert task.indicative_end == date(2024, 4, 10)
     assert task.completion_pct == 0
+
+
+def test_delete_only_completed_stage_resets_completion(client):
+    test_client, session, task = client
+
+    stage = test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={
+            "name": "Разработка",
+            "sort_order": 0,
+            "start_date": "2024-03-01",
+            "end_date": "2024-03-15",
+            "is_indicative": True,
+        },
+    ).json()
+    test_client.patch(
+        f"/api/tasks/{task.id}/sub-stages/{stage['id']}",
+        json={"is_done": True},
+    )
+    session.expire_all()
+    session.refresh(task)
+    assert task.completion_pct == 100
+
+    response = test_client.delete(f"/api/tasks/{task.id}/sub-stages/{stage['id']}")
+    assert response.status_code == 204
+
+    session.expire_all()
+    session.refresh(task)
+    assert task.completion_pct == 0
+    assert task.status.value != "done"

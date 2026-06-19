@@ -54,9 +54,10 @@ def recompute_component_completion(db: Session, component: ProjectComponent) -> 
         .all()
     )
     if not stages:
-        return
-    done = sum(1 for s in stages if s.is_done)
-    new_pct = int(round(done / len(stages) * 100))
+        new_pct = 0
+    else:
+        done = sum(1 for s in stages if s.is_done)
+        new_pct = int(round(done / len(stages) * 100))
     component.completion_pct = new_pct
     if new_pct == 100:
         component.status = TaskStatus.done

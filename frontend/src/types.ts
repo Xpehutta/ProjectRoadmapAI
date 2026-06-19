@@ -49,6 +49,14 @@ export interface SubStage {
   predecessor_stage_ids: number[]
 }
 
+export type StageInternalLinkRelation = 'after' | 'before'
+
+export interface StageInternalLink {
+  first_stage_id: number
+  second_stage_id: number
+  relation: StageInternalLinkRelation
+}
+
 export interface PredecessorRef {
   id: number
   name: string
@@ -136,6 +144,7 @@ export interface Task {
   component_usage_count: number
   sub_stages: SubStage[]
   predecessors: PredecessorRef[]
+  internal_stage_links: StageInternalLink[]
 }
 
 export interface Milestone {

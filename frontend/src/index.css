@@ -1088,40 +1088,82 @@ body { margin: 0; }
   font-size: 0.85rem;
 }
 
-.stage-internal-deps-editor {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
+.new-stage-internal-deps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.stage-internal-deps-header h4 {
-  margin: 0 0 4px;
-  font-size: 0.9rem;
+.stage-focus-deps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
 }
 
-.stage-internal-deps-list {
+.stage-focus-deps-label {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.stage-focus-deps-empty {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.stage-focus-deps-list {
   list-style: none;
-  margin: 8px 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.stage-internal-dep-item {
+.stage-focus-dep-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #faf5ff;
   font-size: 0.85rem;
 }
 
-.stage-internal-dep-error {
-  margin-top: 6px;
+.stage-focus-dep-ref {
+  flex: 1;
+  min-width: 120px;
+}
+
+.stage-focus-dep-type {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+.stage-focus-dep-type select {
+  min-width: 88px;
+}
+
+.stage-focus-deps-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.stage-focus-dep-error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #dc2626;
+}
+
+.new-stage-internal-relation-hint {
+  margin: 0;
+  font-size: 0.8rem;
 }
 
 .progress-fill { height: 100%; border-radius: 3px; background: #2563eb; }

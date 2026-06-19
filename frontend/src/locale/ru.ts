@@ -283,34 +283,17 @@ export const ru = {
     stageNamePlaceholder: 'например, Разработка',
     stageStartDate: 'Начало',
     stageEndDate: 'Окончание',
-    stagePredecessors: 'Предшественники',
-    stagePredecessorsPlaceholder: 'номера этапов через запятую, напр. 1, 2',
     stagePredecessorsHint:
-      'Можно указать номера в поле этапа или добавить связь в блоке ниже. На Gantt — фиолетовые стрелки между этапами.',
-    stagePredecessorsInvalid: 'Укажите номера этапов через запятую (например: 1, 2)',
-    stageInternalDependencies: 'Зависимости между этапами (внутри задачи)',
-    stageInternalDependenciesHint:
-      'Этап-последователь начинается после окончания этапа-предшественника. Отображается на Gantt фиолетовой стрелкой.',
-    stageInternalDependenciesEmpty:
-      'Нет связей между этапами. Укажите предшественников в карточке этапа или при добавлении нового этапа.',
-    stageInternalDependencyAdd: '+ Добавить связь',
-    stageInternalDependencyRemove: 'Удалить',
-    stageInternalDependencyPred: 'Этап-предшественник',
-    stageInternalDependencySucc: 'Зависимый этап',
-    stageInternalDependencyPickStage: 'Выберите этап',
-    stageInternalDependencyPickBoth: 'Выберите предшественников и зависимый этап',
-    stageInternalDependencySameStage: 'Этап не может зависеть от самого себя',
-    stageInternalDependencyDuplicate: 'Такая связь уже есть',
-    stageInternalDependencySaveError: 'Не удалось сохранить связь между этапами',
-    stageInternalDependencyLabel: (
-      predNum: number,
-      predName: string,
-      succNum: number,
-      succName: string
-    ) => `${predNum}. ${predName} → ${succNum}. ${succName}`,
+      'Для каждой связи выберите тип «После» или «До». На Gantt — фиолетовые стрелки между этапами.',
+    stageInternalLinks: 'Связи с этапами',
+    stageInternalLinksEmpty: 'Нет связей с другими этапами.',
+    stageInternalLinkAdd: '+ Добавить связь',
+    stageInternalLinkRemove: 'Удалить',
+    stageInternalLinkPickStage: 'Выберите этап',
+    stageInternalLinkSaveError: 'Не удалось сохранить связи между этапами',
     taskDependencies: 'Зависимости от других задач',
     taskDependenciesHint:
-      'Связь между задачами проекта. Для порядка этапов внутри этой задачи используйте блок выше.',
+      'Связь между задачами проекта. Для порядка этапов внутри задачи укажите предшественников у этапа или при добавлении.',
     taskDependenciesEmpty: 'Нет зависимостей от других задач.',
     taskDependencyAdd: '+ Добавить зависимость',
     taskDependencyRemove: 'Удалить',
@@ -321,9 +304,16 @@ export const ru = {
     taskDependencyWholeTask: 'Вся задача',
     taskDependencyType: 'Тип',
     newStageDependencyEnable: 'Зависит от другой задачи',
-    newStageInternalPredecessors: 'После этапов',
+    newStageInternalPredecessors: 'Связь с этапами',
     newStageInternalPredecessorsHint:
-      'Выберите один или несколько этапов (Cmd/Ctrl + клик). Новый этап начнётся после их завершения.',
+      'Выберите этапы (Cmd/Ctrl + клик), затем укажите тип связи для каждого.',
+    stageInternalDependencyType: 'Тип связи',
+    newStageInternalRelationAfter: 'После',
+    newStageInternalRelationBefore: 'До',
+    newStageInternalRelationAfterHint:
+      'Новый этап начнётся после окончания выбранных этапов.',
+    newStageInternalRelationBeforeHint:
+      'Новый этап должен завершиться до начала выбранных этапов.',
     stagePredecessorPickerEmpty: 'Не выбрано — новый этап не привязан к порядку внутри задачи.',
     newStageInternalDependencyEnable: 'Зависит от этапа этой задачи',
     newStageInternalDependencyHint:
