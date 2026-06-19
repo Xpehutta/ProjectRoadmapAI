@@ -20,10 +20,10 @@ const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((s) => [s.id, s.labe
 export const BUILTIN_COLUMN_ORDER: { key: keyof Task | 'predecessors'; label: string; type: TableColumnType }[] = [
   { key: 'priority', label: 'Приоритет', type: 'number' },
   { key: 'status', label: 'Статус', type: 'status' },
-  { key: 'category_id', label: 'БВ', type: 'category' },
+  { key: 'category_id', label: 'Область', type: 'category' },
   { key: 'name', label: ru.table.usage, type: 'text' },
   { key: 'data_source', label: 'Источник', type: 'readonly' },
-  { key: 'subproduct', label: 'Субпродукт', type: 'text' },
+  { key: 'subproduct', label: 'Витрина', type: 'text' },
   { key: 'forms', label: 'Формы', type: 'text' },
   { key: 'customer', label: 'Заказчик', type: 'text' },
   { key: 'platform', label: 'Площадка', type: 'text' },
@@ -112,14 +112,26 @@ function labelForCustomKey(key: string, project: ProjectDetail): string {
   return fromSchema?.label ?? key.replace(/^custom_/, 'Столбец ')
 }
 
+function normalizeColumnLabel(col: TableColumnDef): TableColumnDef {
+  if (col.key === 'category_id' && col.label === 'БВ') {
+    return { ...col, label: 'Область' }
+  }
+  if (col.key === 'subproduct' && col.label === 'Субпродукт') {
+    return { ...col, label: 'Витрина' }
+  }
+  return col
+}
+
 export function resolveTableColumns(project: ProjectDetail, tasks: Task[]): TableColumnDef[] {
   if (project.table_schema?.length) {
-    return project.table_schema.map((col) => ({
-      key: col.key,
-      label: col.label,
-      type: (col.type as TableColumnType) || 'text',
-      source: col.source === 'custom' ? 'custom' : 'builtin',
-    }))
+    return project.table_schema.map((col) =>
+      normalizeColumnLabel({
+        key: col.key,
+        label: col.label,
+        type: (col.type as TableColumnType) || 'text',
+        source: col.source === 'custom' ? 'custom' : 'builtin',
+      })
+    )
   }
 
   const columns: TableColumnDef[] = []

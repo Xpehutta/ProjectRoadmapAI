@@ -43,10 +43,10 @@ PINNED_KEYS_DATAMARTS = frozenset(
 BUILTIN_COLUMNS: list[dict[str, str]] = [
     {"key": "priority", "label": "Приоритет", "type": "number", "source": "builtin"},
     {"key": "status", "label": "Статус", "type": "status", "source": "builtin"},
-    {"key": "category_id", "label": "БВ", "type": "category", "source": "builtin"},
+    {"key": "category_id", "label": "Область", "type": "category", "source": "builtin"},
     {"key": "name", "label": "Использование", "type": "text", "source": "builtin"},
     {"key": "data_source", "label": "Источник", "type": "readonly", "source": "builtin"},
-    {"key": "subproduct", "label": "Субпродукт", "type": "text", "source": "builtin"},
+    {"key": "subproduct", "label": "Витрина", "type": "text", "source": "builtin"},
     {"key": "forms", "label": "Формы", "type": "text", "source": "builtin"},
     {"key": "customer", "label": "Заказчик", "type": "text", "source": "builtin"},
     {"key": "platform", "label": "Площадка", "type": "text", "source": "builtin"},
@@ -122,10 +122,19 @@ def _label_for_custom_key(key: str, schema: list[dict] | None) -> str:
     return key.replace("custom_", "Столбец ")
 
 
+def _normalize_column_label(col: dict) -> dict:
+    out = dict(col)
+    if out.get("key") == "category_id" and out.get("label") == "БВ":
+        out["label"] = "Область"
+    if out.get("key") == "subproduct" and out.get("label") == "Субпродукт":
+        out["label"] = "Витрина"
+    return out
+
+
 def materialize_schema(project: Project, tasks: list[Task]) -> list[dict]:
     """Build effective column list (adaptive mode) from tasks."""
     if project.table_schema:
-        return [dict(col) for col in project.table_schema]
+        return [_normalize_column_label(col) for col in project.table_schema]
 
     columns: list[dict] = []
     pinned = pinned_keys_for_project(project, tasks)

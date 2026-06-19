@@ -270,7 +270,7 @@ export const ru = {
     stageShift: 'Сдвиг',
     stagePlan: 'Запланировать',
     stageCorrect: 'Скорректировать',
-    unmarkStage: 'Снять отметку',
+    unmarkStage: 'Снять отметку о выполнении',
     addStage: '+ Добавить этап',
     pickFromTemplate: 'Этап из шаблона',
     customStageOption: 'Свой этап…',

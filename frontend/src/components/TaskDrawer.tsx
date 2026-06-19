@@ -57,6 +57,7 @@ import {
 import { PlannedEffortCalculator } from './PlannedEffortCalculator'
 import { NewStageDependencyFields } from './NewStageDependencyFields'
 import { StageFocusDependenciesEditor } from './StageFocusDependenciesEditor'
+import { TaskFieldCombobox } from './TaskFieldCombobox'
 import { TaskDependenciesEditor } from './TaskDependenciesEditor'
 import {
   draftsFromPredecessors,
@@ -82,6 +83,10 @@ import {
   suggestedStartFromInternalStagePredecessors,
   type StageFocusDependency,
 } from '../utils/stageInternalDeps'
+import {
+  collectGeneralTabFieldSuggestions,
+  isoDateInputValue,
+} from '../utils/taskFieldSuggestions'
 
 interface Props {
   project: ProjectDetail
@@ -187,6 +192,10 @@ export function TaskDrawer({ project, task }: Props) {
     () => new Map(effectiveTasks.map((t) => [t.id, t])),
     [effectiveTasks]
   )
+  const generalFieldSuggestions = useMemo(
+    () => collectGeneralTabFieldSuggestions(effectiveTasks, project.components),
+    [effectiveTasks, project.components]
+  )
   const hasPending = Boolean(pending)
   const dateShifts = useTaskDateShifts(task)
   const linkedComponent = task.component_id
@@ -267,12 +276,12 @@ export function TaskDrawer({ project, task }: Props) {
   })
 
   const toggleStage = async (stage: SubStage) => {
-    if (!isStagePlanned(stage)) return
     if (stage.is_done) {
       await api.updateSubStage(task.id, stage.id, { is_done: false })
       await refreshProjectAfterSubStageChange(qc, project.id)
       return
     }
+    if (!isStagePlanned(stage)) return
     setCompletingStage(stage)
   }
 
@@ -1012,64 +1021,58 @@ export function TaskDrawer({ project, task }: Props) {
                 onBlur={(e) => patch('priority', e.target.value ? Number(e.target.value) : null)}
               />
             </label>
-            <label>
-              {ru.drawer.showcase}
-              <input
-                key={`sub-${effective.subproduct}`}
-                defaultValue={effective.subproduct ?? ''}
-                onBlur={(e) => patch('subproduct', e.target.value || null)}
-              />
-            </label>
-            <label>
-              Источник
-              <input
-                key={`src-${effective.data_source}-${effective.component_name}`}
-                defaultValue={effective.component_name ?? effective.data_source ?? ''}
-                readOnly={Boolean(task.component_id)}
-                className={task.component_id ? 'readonly-field' : undefined}
-                onBlur={(e) => {
-                  if (!task.component_id) patch('data_source', e.target.value || null)
-                }}
-              />
-            </label>
-            <label>
-              Формы
-              <input
-                key={`forms-${effective.forms}`}
-                defaultValue={effective.forms ?? ''}
-                onBlur={(e) => patch('forms', e.target.value || null)}
-              />
-            </label>
-            <label>
-              Заказчик
-              <input
-                key={`cust-${effective.customer}`}
-                defaultValue={effective.customer ?? ''}
-                onBlur={(e) => patch('customer', e.target.value || null)}
-              />
-            </label>
-            <label>
-              Площадка
-              <input
-                key={`plat-${effective.platform}`}
-                defaultValue={effective.platform ?? ''}
-                onBlur={(e) => patch('platform', e.target.value || null)}
-              />
-            </label>
-            <label>
-              Область
-              <input
-                key={`area-${effective.area}`}
-                defaultValue={effective.area ?? ''}
-                onBlur={(e) => patch('area', e.target.value || null)}
-              />
-            </label>
+            <TaskFieldCombobox
+              listId={`task-${task.id}-subproduct`}
+              label={ru.drawer.showcase}
+              value={effective.subproduct ?? ''}
+              suggestions={generalFieldSuggestions.subproduct}
+              onCommit={(value) => patch('subproduct', value)}
+            />
+            <TaskFieldCombobox
+              listId={`task-${task.id}-data-source`}
+              label="Источник"
+              value={effective.component_name ?? effective.data_source ?? ''}
+              suggestions={generalFieldSuggestions.data_source}
+              readOnly={Boolean(task.component_id)}
+              onCommit={(value) => {
+                if (!task.component_id) patch('data_source', value)
+              }}
+            />
+            <TaskFieldCombobox
+              listId={`task-${task.id}-forms`}
+              label="Формы"
+              value={effective.forms ?? ''}
+              suggestions={generalFieldSuggestions.forms}
+              onCommit={(value) => patch('forms', value)}
+            />
+            <TaskFieldCombobox
+              listId={`task-${task.id}-customer`}
+              label="Заказчик"
+              value={effective.customer ?? ''}
+              suggestions={generalFieldSuggestions.customer}
+              onCommit={(value) => patch('customer', value)}
+            />
+            <TaskFieldCombobox
+              listId={`task-${task.id}-platform`}
+              label="Площадка"
+              value={effective.platform ?? ''}
+              suggestions={generalFieldSuggestions.platform}
+              onCommit={(value) => patch('platform', value)}
+            />
+            <TaskFieldCombobox
+              listId={`task-${task.id}-area`}
+              label="Область"
+              value={effective.area ?? ''}
+              suggestions={generalFieldSuggestions.area}
+              onCommit={(value) => patch('area', value)}
+            />
             <label>
               Желаемый срок
               <input
+                type="date"
                 key={`dq-${effective.desired_quarter}`}
-                defaultValue={effective.desired_quarter ?? ''}
-                onBlur={(e) => patch('desired_quarter', e.target.value || null)}
+                defaultValue={isoDateInputValue(effective.desired_quarter)}
+                onChange={(e) => patch('desired_quarter', e.target.value || null)}
               />
             </label>
             {renderTabComment('general')}
@@ -1131,7 +1134,15 @@ export function TaskDrawer({ project, task }: Props) {
                       {s.name}
                     </span>
                     <div className="phase-actions">
-                      {!isStagePlanned(s) ? (
+                      {s.is_done ? (
+                        <button
+                          type="button"
+                          className="btn-link"
+                          onClick={() => void toggleStage(s)}
+                        >
+                          {ru.drawer.unmarkStage}
+                        </button>
+                      ) : !isStagePlanned(s) ? (
                         <>
                           <button
                             type="button"
@@ -1157,23 +1168,13 @@ export function TaskDrawer({ project, task }: Props) {
                         </>
                       ) : (
                         <>
-                          {s.is_done ? (
-                            <button
-                              type="button"
-                              className="btn-link"
-                              onClick={() => void toggleStage(s)}
-                            >
-                              {ru.drawer.unmarkStage}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn-small"
-                              onClick={() => setCompletingStage(s)}
-                            >
-                              {ru.drawer.stageDone}
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className="btn-small"
+                            onClick={() => setCompletingStage(s)}
+                          >
+                            {ru.drawer.stageDone}
+                          </button>
                           <button
                             type="button"
                             className="btn-small btn-save-quiet"
@@ -1192,6 +1193,7 @@ export function TaskDrawer({ project, task }: Props) {
                       )}
                     </div>
                   </div>
+                  {!s.is_done && (
                   <div className="phase-meta">
                     <label className="phase-date-field">
                       <span>{ru.drawer.stageStartDate}</span>
@@ -1243,6 +1245,7 @@ export function TaskDrawer({ project, task }: Props) {
                       onSave={(deps) => saveFocusStageDeps(s, deps)}
                     />
                   </div>
+                  )}
                 </li>
               ))}
               {!task.sub_stages.length && <li className="muted">{ru.drawer.noStages}</li>}
