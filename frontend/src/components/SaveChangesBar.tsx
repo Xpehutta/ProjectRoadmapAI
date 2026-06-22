@@ -84,6 +84,9 @@ export function SaveChangesBar({ projectId }: Props) {
         if (recordShifts && getTaskDateShiftFromPendingChange(t) && t.shiftComment?.trim()) {
           await api.addComment(t.taskId, t.shiftComment.trim())
         }
+        if (t.patch.status && t.statusComment?.trim()) {
+          await api.addComment(t.taskId, t.statusComment.trim())
+        }
       }
       if (recordShifts) {
         for (const t of taskList) recordTaskFromPending(t)

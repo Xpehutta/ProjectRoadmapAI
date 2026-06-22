@@ -1482,6 +1482,12 @@ body { margin: 0; }
 .date-autofill-modal { max-width: 420px; }
 .date-autofill-suggested { margin: 0.5rem 0 1rem; }
 .date-autofill-actions { flex-wrap: wrap; gap: 0.5rem; }
+
+.stage-status-prompt-modal { max-width: 440px; }
+.stage-status-prompt-modal label { display: block; margin: 0.75rem 0; }
+.stage-status-prompt-modal select,
+.stage-status-prompt-modal textarea { width: 100%; margin-top: 0.35rem; }
+.stage-status-prompt-actions { flex-wrap: wrap; gap: 0.5rem; }
 .dependency-start-hint { display: block; margin-top: 4px; font-size: 0.75rem; }
 .stage-predecessors-hint { margin: 0 0 8px; font-size: 0.78rem; }
 .phase-actions { display: flex; gap: 6px; flex-shrink: 0; }

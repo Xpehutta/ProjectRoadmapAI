@@ -15,6 +15,7 @@ import { Toolbar } from './components/Toolbar'
 import { ProjectStartPage } from './components/ProjectStartPage'
 import { SaveChangesBar } from './components/SaveChangesBar'
 import { UserNameModal } from './components/UserNameModal'
+import { useStageStatusPrompt } from './hooks/useStageStatusPrompt'
 import { useCreateProject, useImportProject, useProject, useProjects } from './hooks/useProject'
 import { useUnsavedChangesWarning } from './hooks/useUnsavedChangesWarning'
 import { useHasAnyPending } from './hooks/useEffectiveTasks'
@@ -65,6 +66,7 @@ function App() {
   }
 
   const { data: project, isLoading: loadingProject } = useProject(activeProjectId ?? 0)
+  const { stageStatusPromptModal } = useStageStatusPrompt(projectEntered ? project : undefined)
 
   useEffect(() => {
     if (!loadingProjects && projects.length && activeProjectId && activeProjectId !== selectedProjectId) {
@@ -185,6 +187,7 @@ function App() {
         <GoalManager project={project} onClose={() => setShowGoals(false)} />
       )}
       {showAuditModal && <AuditModal projectId={project.id} />}
+      {stageStatusPromptModal}
       <SaveChangesBar projectId={project.id} />
     </div>
   )

@@ -411,6 +411,23 @@ export const ru = {
     invalidDate: 'Укажите дату',
   },
 
+  stageStatusPrompt: {
+    title: 'Обновить статус задачи',
+    message: (taskName: string, stagesLabel: string) =>
+      `Сегодня в сроках этапа ${stagesLabel} по задаче «${taskName}». Рекомендуется перевести задачу в статус «В работе».`,
+    singleStage: (name: string) => `«${name}»`,
+    multipleStages: (names: string[]) => names.map((n) => `«${n}»`).join(', '),
+    currentStatus: 'Текущий статус',
+    statusLabel: 'Статус',
+    comment: 'Комментарий',
+    commentRequired: 'Укажите комментарий, если статус отличается от «В работе»',
+    commentPlaceholder: 'Почему задача не переводится в работу?',
+    commentPrefix: (stageNames: string) =>
+      `Статус при активном этапе ${stageNames}`,
+    confirm: 'Применить',
+    dismiss: 'Позже',
+  },
+
   deleteStage: {
     title: (name: string) => `Удалить этап «${name}»?`,
     message: 'Этап будет удалён безвозвратно.',

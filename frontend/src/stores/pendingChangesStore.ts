@@ -9,6 +9,7 @@ export interface PendingTaskChange {
   patch: Record<string, unknown>
   original: Record<string, unknown>
   shiftComment?: string
+  statusComment?: string
 }
 
 export interface PendingMilestoneDate {
@@ -30,6 +31,7 @@ interface PendingChangesState {
   ) => void
   stageMilestone: (change: PendingMilestoneDate) => void
   setTaskShiftComment: (taskId: number, comment: string) => void
+  setTaskStatusComment: (taskId: number, comment: string) => void
   setMilestoneShiftComment: (milestoneId: number, comment: string) => void
   getTaskPatch: (taskId: number) => Record<string, unknown> | undefined
   hasTaskPending: (taskId: number) => boolean
@@ -72,6 +74,7 @@ export const usePendingChangesStore = create<PendingChangesState>((set, get) => 
           patch: cleaned,
           original,
           shiftComment: prev?.shiftComment,
+          statusComment: prev?.statusComment,
         }
       }
       return { taskChanges: next }
@@ -104,6 +107,18 @@ export const usePendingChangesStore = create<PendingChangesState>((set, get) => 
         taskChanges: {
           ...s.taskChanges,
           [taskId]: { ...change, shiftComment: comment },
+        },
+      }
+    }),
+
+  setTaskStatusComment: (taskId, comment) =>
+    set((s) => {
+      const change = s.taskChanges[taskId]
+      if (!change) return s
+      return {
+        taskChanges: {
+          ...s.taskChanges,
+          [taskId]: { ...change, statusComment: comment },
         },
       }
     }),

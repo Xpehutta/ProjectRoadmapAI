@@ -13,6 +13,7 @@ import { useDateAutoFillPrompt } from '../hooks/useDateAutoFillPrompt'
 import { useDeleteTask } from '../hooks/useProject'
 import { usePendingChangesStore } from '../stores/pendingChangesStore'
 import { useSavedDateShiftsStore } from '../stores/savedDateShiftsStore'
+import { useStageStatusPromptStore } from '../stores/stageStatusPromptStore'
 import { useUIStore } from '../stores/uiStore'
 import type { AuditEventType, Moscow, ProjectDetail, StageTemplate, SubStage, Task } from '../types'
 import {
@@ -150,6 +151,11 @@ export function TaskDrawer({ project, task }: Props) {
   const pruneStageShiftsForTask = useSavedDateShiftsStore((s) => s.pruneStageShiftsForTask)
   const clearTaskDateShifts = useSavedDateShiftsStore((s) => s.clearTaskDateShifts)
   const { requestDate, dateAutoFillModal } = useDateAutoFillPrompt()
+  const enqueueStageStatusPrompt = useStageStatusPromptStore((s) => s.enqueueTask)
+
+  const maybePromptStageStatus = (updatedTask?: Task) => {
+    if (updatedTask) enqueueStageStatusPrompt(updatedTask)
+  }
 
   const { data: stageLibrary } = useQuery({
     queryKey: ['stage-templates', project.id],
@@ -317,6 +323,8 @@ export function TaskDrawer({ project, task }: Props) {
     patchSubStageInProjectCache(qc, project.id, stageItem.id, dates)
     await refreshProjectAfterSubStageChange(qc, project.id)
     setStageDateInputReset((n) => n + 1)
+    const updatedProject = qc.getQueryData<ProjectDetail>(['project', project.id])
+    maybePromptStageStatus(updatedProject?.tasks.find((t) => t.id === task.id))
   }
 
   const handleStageCompleteConfirm = async (data: {
@@ -452,6 +460,8 @@ export function TaskDrawer({ project, task }: Props) {
         }
       }
     }
+
+    if (updatedTask) maybePromptStageStatus(updatedTask)
   }
 
   const completeAll = async () => {
