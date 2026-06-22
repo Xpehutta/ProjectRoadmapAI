@@ -182,11 +182,24 @@ export const api = {
     }),
   listComponents: (projectId: number) =>
     request<ProjectComponent[]>(`/api/projects/${projectId}/components`),
+  createComponent: (
+    projectId: number,
+    body: { name: string; data_source: string }
+  ) =>
+    request<ProjectComponent>(`/api/projects/${projectId}/components`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   unlinkTaskComponent: (taskId: number) =>
     request<Task>(`/api/tasks/${taskId}/unlink-component`, { method: 'POST' }),
   linkTaskComponent: (taskId: number, componentId: number) =>
     request<ProjectComponent>(`/api/tasks/${taskId}/link-component/${componentId}`, {
       method: 'POST',
+    }),
+  promoteTaskToComponent: (taskId: number, dataSource?: string) =>
+    request<ProjectComponent>(`/api/tasks/${taskId}/promote-to-component`, {
+      method: 'POST',
+      body: JSON.stringify({ data_source: dataSource ?? null }),
     }),
   getStageTemplates: (projectId: number) =>
     request<StageTemplateLibrary>(`/api/projects/${projectId}/stage-templates`),

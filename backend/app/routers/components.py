@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Project, ProjectComponent, Task
-from app.schemas import ComponentCreate, ComponentOut, ComponentUpdate
+from app.schemas import ComponentCreate, ComponentOut, ComponentUpdate, PromoteToComponentBody
 from app.services.components import component_to_out, load_component
 from app.services.component_merge import copy_component_stages_to_task, copy_component_to_task
+from app.services.component_share import link_task_to_component, promote_task_to_component
 from app.services.tasks import load_task, task_to_out
 
 router = APIRouter(tags=["components"])
@@ -65,18 +66,36 @@ def update_component(component_id: int, payload: ComponentUpdate, db: Session = 
 
 
 @router.post("/tasks/{task_id}/link-component/{component_id}", response_model=ComponentOut)
-def link_task_to_component(task_id: int, component_id: int, db: Session = Depends(get_db)):
+def link_task_to_component_route(task_id: int, component_id: int, db: Session = Depends(get_db)):
     task = load_task(db, task_id)
     component = load_component(db, component_id)
     if not task or not component:
         raise HTTPException(404, "Task or component not found")
-    if task.project_id != component.project_id:
-        raise HTTPException(400, "Component belongs to another project")
-    task.component_id = component.id
-    task.data_source = component.data_source
-    task.version += 1
+    try:
+        link_task_to_component(db, task, component)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     db.commit()
-    return component_to_out(component)
+    return component_to_out(load_component(db, component.id))
+
+
+@router.post("/tasks/{task_id}/promote-to-component", response_model=ComponentOut)
+def promote_task_to_component_route(
+    task_id: int,
+    payload: PromoteToComponentBody | None = None,
+    db: Session = Depends(get_db),
+):
+    task = load_task(db, task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    body = payload or PromoteToComponentBody()
+    if body.data_source:
+        task.data_source = body.data_source.strip()
+    try:
+        component = promote_task_to_component(db, task, data_source=body.data_source or task.data_source)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return component_to_out(load_component(db, component.id))
 
 
 @router.post("/tasks/{task_id}/unlink-component")

@@ -223,6 +223,15 @@ export function TaskDrawer({ project, task }: Props) {
   const linkedComponent = task.component_id
     ? project.components?.find((c) => c.id === task.component_id)
     : undefined
+
+  const dataSourceValue = (effective.data_source ?? '').trim()
+  const matchingComponent = !task.component_id
+    ? project.components?.find(
+        (c) => c.data_source.trim().toLowerCase() === dataSourceValue.toLowerCase()
+      )
+    : undefined
+
+  const linkableComponents = (project.components ?? []).filter((c) => c.id !== task.component_id)
   const otherUsages =
     linkedComponent?.usages.filter((u) => u.id !== task.id) ?? []
 
@@ -265,6 +274,22 @@ export function TaskDrawer({ project, task }: Props) {
       qc.invalidateQueries({ queryKey: ['project', project.id] })
     },
   })
+
+  const linkComponent = useMutation({
+    mutationFn: (componentId: number) => api.linkTaskComponent(task.id, componentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', project.id] })
+    },
+  })
+
+  const promoteToComponent = useMutation({
+    mutationFn: (dataSource?: string) => api.promoteTaskToComponent(task.id, dataSource),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', project.id] })
+    },
+  })
+
+  const [linkComponentId, setLinkComponentId] = useState<number | ''>('')
 
   const deleteTask = useDeleteTask(project.id)
 
@@ -1148,6 +1173,71 @@ export function TaskDrawer({ project, task }: Props) {
                 if (!task.component_id) patch('data_source', value)
               }}
             />
+            {!task.component_id && (
+              <section className="shared-source-panel">
+                <p className="muted shared-source-panel-hint">{ru.components.promoteHint}</p>
+                {matchingComponent && (
+                  <p className="muted">
+                    {ru.components.matchBySource(matchingComponent.data_source)}
+                  </p>
+                )}
+                <div className="shared-source-panel-actions">
+                  <button
+                    type="button"
+                    className="btn-small"
+                    disabled={promoteToComponent.isPending || !dataSourceValue}
+                    title={!dataSourceValue ? ru.components.dataSourceRequired : undefined}
+                    onClick={() => promoteToComponent.mutate(dataSourceValue || undefined)}
+                  >
+                    {promoteToComponent.isPending
+                      ? ru.components.promoting
+                      : ru.components.promoteToShared}
+                  </button>
+                  {matchingComponent && (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-small"
+                      disabled={linkComponent.isPending}
+                      onClick={() => linkComponent.mutate(matchingComponent.id)}
+                    >
+                      {linkComponent.isPending
+                        ? ru.components.linking
+                        : ru.components.linkToShared}
+                    </button>
+                  )}
+                </div>
+                {linkableComponents.length > 0 && (
+                  <div className="shared-source-link-row">
+                    <label>
+                      {ru.components.linkSelectLabel}
+                      <select
+                        value={linkComponentId}
+                        onChange={(e) =>
+                          setLinkComponentId(e.target.value ? Number(e.target.value) : '')
+                        }
+                      >
+                        <option value="">—</option>
+                        {linkableComponents.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.data_source} ({ru.components.usageCount(c.usage_count)})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      className="btn-secondary btn-small"
+                      disabled={linkComponent.isPending || !linkComponentId}
+                      onClick={() => {
+                        if (linkComponentId) linkComponent.mutate(linkComponentId)
+                      }}
+                    >
+                      {linkComponent.isPending ? ru.components.linking : ru.components.link}
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
             <TaskFieldCombobox
               listId={`task-${task.id}-forms`}
               label="Формы"

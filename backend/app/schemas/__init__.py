@@ -324,6 +324,10 @@ class ComponentUpdate(BaseModel):
     notes: str | None = None
 
 
+class PromoteToComponentBody(BaseModel):
+    data_source: str | None = None
+
+
 class ComponentUsageOut(BaseModel):
     id: int
     name: str
