@@ -124,7 +124,7 @@ export function NewStageDependencyFields({
               }
             }}
           />
-          {ru.drawer.newStageDependencyEnable}
+          <span className="toggle-label-text">{ru.drawer.newStageDependencyEnable}</span>
         </label>
         {!otherTasks.length && (
           <p className="muted new-stage-dependency-empty">{ru.drawer.newStageDependencyNoTasks}</p>

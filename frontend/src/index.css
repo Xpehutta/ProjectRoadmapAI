@@ -417,7 +417,7 @@ body { margin: 0; }
   border-radius: 999px;
 }
 
-.toggle { font-size: 0.875rem; display: flex; align-items: center; gap: 6px; }
+.toggle:not(.inline-toggle) { font-size: 0.875rem; display: flex; align-items: center; gap: 6px; }
 
 .main {
   flex: 1;
@@ -913,6 +913,10 @@ body { margin: 0; }
   border: 1px dashed #cbd5e1;
   border-radius: 8px;
   background: #f8fafc;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .stage-predecessor-select-field {
@@ -1040,10 +1044,46 @@ body { margin: 0; }
 .new-stage-dependency-hint { margin: 6px 0 10px; font-size: 0.8rem; }
 .new-stage-dependency-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
+  min-width: 0;
 }
-.new-stage-dependency-toggle { margin-bottom: 4px; }
+.new-stage-dependency-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+.new-stage-dependency-grid input,
+.new-stage-dependency-grid select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.new-stage-dependency-toggle {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 4px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.new-stage-dependency-toggle input[type="checkbox"] {
+  margin: 2px 0 0;
+  width: 1rem;
+  height: 1rem;
+}
+.new-stage-dependency-toggle .toggle-label-text {
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
 
 .task-dependencies-editor {
   margin-top: 16px;
@@ -1092,6 +1132,8 @@ body { margin: 0; }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .stage-focus-deps {
@@ -1287,10 +1329,12 @@ body { margin: 0; }
   height: 100vh;
   background: #fff;
   border-left: 1px solid #e2e8f0;
+  overflow-x: hidden;
   overflow-y: auto;
   z-index: 20;
   padding: 16px;
   box-shadow: -4px 0 20px rgba(0,0,0,0.06);
+  box-sizing: border-box;
 }
 
 .task-drawer header {
@@ -1407,7 +1451,7 @@ body { margin: 0; }
   cursor: default;
 }
 .task-drawer h3 { font-size: 0.9rem; margin: 16px 0 8px; display: flex; justify-content: space-between; align-items: center; }
-.task-drawer label { display: block; font-size: 0.8rem; color: #64748b; margin-bottom: 8px; }
+.task-drawer label:not(.inline-toggle) { display: block; font-size: 0.8rem; color: #64748b; margin-bottom: 8px; }
 .task-drawer label input, .task-drawer textarea {
   display: block;
   width: 100%;
@@ -1488,6 +1532,7 @@ body { margin: 0; }
 .stage-status-prompt-modal select,
 .stage-status-prompt-modal textarea { width: 100%; margin-top: 0.35rem; }
 .stage-status-prompt-actions { flex-wrap: wrap; gap: 0.5rem; }
+.stage-bundle-hint { margin: 0 0 8px; font-size: 0.8rem; }
 .dependency-start-hint { display: block; margin-top: 4px; font-size: 0.75rem; }
 .stage-predecessors-hint { margin: 0 0 8px; font-size: 0.78rem; }
 .phase-actions { display: flex; gap: 6px; flex-shrink: 0; }
@@ -1509,9 +1554,11 @@ body { margin: 0; }
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid #e2e8f0;
+  min-width: 0;
+  max-width: 100%;
 }
 
-.add-stage-form label {
+.add-stage-form label:not(.inline-toggle) {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1534,9 +1581,25 @@ body { margin: 0; }
 }
 
 .inline-toggle {
-  flex-direction: row !important;
-  align-items: center;
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 8px !important;
+  align-items: start;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+.inline-toggle input[type="checkbox"] {
+  margin: 2px 0 0;
+  width: 1rem;
+  height: 1rem;
+}
+.inline-toggle .toggle-label-text {
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .phase-meta { margin-left: 1.6rem; font-size: 0.8rem; color: #64748b; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .phase-date-field { display: inline-flex; align-items: center; gap: 4px; }

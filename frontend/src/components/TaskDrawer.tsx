@@ -22,6 +22,12 @@ import {
   groupStageTemplates,
   stageNameTaken,
 } from '../utils/stageTemplates'
+import {
+  bundleStagesToAdd,
+  findStageBundle,
+  isStageBundleValue,
+  PREDEFINED_STAGE_BUNDLES,
+} from '../utils/stageBundles'
 import { formatLocaleDateTime, HISTORY_FILTER_OPTIONS, ru } from '../locale/ru'
 import { formatScore, MOSCOW_OPTIONS, prioritizationScore } from '../utils/scoring'
 import {
@@ -166,6 +172,14 @@ export function TaskDrawer({ project, task }: Props) {
     () => existingStageNameSet(task.sub_stages.map((s) => s.name)),
     [task.sub_stages]
   )
+
+  const selectedBundle = isStageBundleValue(selectedTemplate)
+    ? findStageBundle(selectedTemplate)
+    : undefined
+  const bundleStageNamesToAdd = useMemo(() => {
+    if (!selectedBundle || !stageLibrary?.predefined) return []
+    return bundleStagesToAdd(selectedBundle, stageLibrary.predefined, existingStageNames)
+  }, [selectedBundle, stageLibrary?.predefined, existingStageNames])
 
   const orderedStages = useMemo(() => sortedSubStages(task.sub_stages), [task.sub_stages])
 
@@ -796,8 +810,72 @@ export function TaskDrawer({ project, task }: Props) {
     }
   }
 
+  const addBundleStages = async (bundleId: string) => {
+    const bundle = findStageBundle(bundleId)
+    const predefined = stageLibrary?.predefined ?? []
+    if (!bundle) return
+    const names = bundleStagesToAdd(bundle, predefined, existingStageNames)
+    if (!names.length) return
+
+    setAddingStage(true)
+    try {
+      let sortOrder = task.sub_stages.length
+      let links = [...effectiveInternalLinks]
+      let prevStageId: number | null =
+        orderedStages.length > 0 ? orderedStages[orderedStages.length - 1]!.id : null
+      const createdIds: number[] = []
+
+      for (const name of names) {
+        const createdStage = await api.createSubStage(task.id, {
+          name,
+          sort_order: sortOrder,
+          start_date: null,
+          end_date: null,
+          is_indicative: false,
+        })
+        patchSubStageInProjectCache(qc, project.id, createdStage.id, { is_indicative: false })
+
+        const internalDeps: StageFocusDependency[] = []
+        if (prevStageId !== null) {
+          internalDeps.push({ refStageId: prevStageId, relation: 'after' })
+        }
+        if (internalDeps.length) {
+          links = mergeDependenciesForNewStage(links, createdStage.id, internalDeps)
+        }
+
+        createdIds.push(createdStage.id)
+        prevStageId = createdStage.id
+        sortOrder += 1
+      }
+
+      if (createdIds.length) {
+        const updated = await api.updateInternalStageLinks(task.id, links)
+        applyTaskInternalLinksUpdate(qc, project.id, updated)
+      }
+
+      setNewStageName('')
+      setNewStageStartDate('')
+      setNewStageEndDate('')
+      setNewStageDependency(null)
+      setNewStageInternalDeps([])
+      setSelectedTemplate('')
+      setSaveTemplateForReuse(false)
+      await refreshProjectAfterSubStageChange(qc, project.id)
+
+      const refreshedProject = qc.getQueryData<ProjectDetail>(['project', project.id])
+      const refreshedTask = refreshedProject?.tasks.find((t) => t.id === task.id)
+      if (refreshedTask) maybePromptStageStatus(refreshedTask)
+    } finally {
+      setAddingStage(false)
+    }
+  }
+
   const addStage = async (e: FormEvent) => {
     e.preventDefault()
+    if (isStageBundleValue(selectedTemplate)) {
+      await addBundleStages(selectedTemplate)
+      return
+    }
     const name = newStageName.trim()
     if (!name) return
     setAddingStage(true)
@@ -891,6 +969,15 @@ export function TaskDrawer({ project, task }: Props) {
 
   const handleTemplateSelect = (value: string) => {
     setSelectedTemplate(value)
+    if (isStageBundleValue(value)) {
+      setNewStageName('')
+      setNewStageStartDate('')
+      setNewStageEndDate('')
+      setNewStageDependency(null)
+      setNewStageInternalDeps([])
+      setSaveTemplateForReuse(false)
+      return
+    }
     if (value === CUSTOM_STAGE_VALUE) {
       setNewStageName('')
       return
@@ -1281,12 +1368,34 @@ export function TaskDrawer({ project, task }: Props) {
                   onChange={(e) => handleTemplateSelect(e.target.value)}
                 >
                   <option value="">—</option>
+                  <optgroup label={ru.drawer.templateBundles}>
+                    {PREDEFINED_STAGE_BUNDLES.map((bundle) => {
+                      const count = stageLibrary?.predefined
+                        ? bundleStagesToAdd(bundle, stageLibrary.predefined, existingStageNames).length
+                        : 0
+                      return (
+                        <option key={bundle.id} value={bundle.id} disabled={count === 0}>
+                          {bundle.label}
+                          {count === 0
+                            ? ` (${ru.drawer.templateAlreadyOnTask})`
+                            : ` (${count})`}
+                        </option>
+                      )
+                    })}
+                  </optgroup>
                   {renderTemplateOptions(stageLibrary?.predefined, ru.drawer.templatePredefined)}
                   {renderTemplateOptions(stageLibrary?.custom, ru.drawer.templateCustom)}
                   {renderTemplateOptions(stageLibrary?.used, ru.drawer.templateUsed)}
                   <option value={CUSTOM_STAGE_VALUE}>{ru.drawer.customStageOption}</option>
                 </select>
               </label>
+              {selectedBundle && (
+                <p className="muted stage-bundle-hint">
+                  {bundleStageNamesToAdd.length > 0
+                    ? ru.drawer.bundleStagesHint(bundleStageNamesToAdd.length)
+                    : ru.drawer.bundleAllOnTask}
+                </p>
+              )}
               {(selectedTemplate === CUSTOM_STAGE_VALUE || !selectedTemplate) && (
                 <label>
                   {ru.drawer.stageName}
@@ -1304,20 +1413,24 @@ export function TaskDrawer({ project, task }: Props) {
                     checked={saveTemplateForReuse}
                     onChange={(e) => setSaveTemplateForReuse(e.target.checked)}
                   />
-                  {ru.drawer.saveForReuse}
+                  <span className="toggle-label-text">{ru.drawer.saveForReuse}</span>
                 </label>
               )}
-              <NewStageDependencyFields
-                stageName={newStageName}
-                stageNumber={stageDisplayNumber(task.sub_stages.length)}
-                existingStages={orderedStages}
-                tasks={project.tasks}
-                currentTaskId={task.id}
-                crossTaskValue={newStageDependency}
-                onCrossTaskChange={setNewStageDependency}
-                internalDeps={newStageInternalDeps}
-                onInternalDepsChange={setNewStageInternalDeps}
-              />
+              {!selectedBundle && (
+                <NewStageDependencyFields
+                  stageName={newStageName}
+                  stageNumber={stageDisplayNumber(task.sub_stages.length)}
+                  existingStages={orderedStages}
+                  tasks={project.tasks}
+                  currentTaskId={task.id}
+                  crossTaskValue={newStageDependency}
+                  onCrossTaskChange={setNewStageDependency}
+                  internalDeps={newStageInternalDeps}
+                  onInternalDepsChange={setNewStageInternalDeps}
+                />
+              )}
+              {!selectedBundle && (
+              <>
               <label>
                 {ru.drawer.stageStartDate}
                 <input
@@ -1364,8 +1477,25 @@ export function TaskDrawer({ project, task }: Props) {
                   onChange={setNewStageEndDate}
                 />
               </label>
-              <button type="submit" className="btn-small" disabled={addingStage || !newStageName.trim()}>
-                {addingStage ? ru.drawer.addingStage : ru.drawer.addStage}
+              </>
+              )}
+              <button
+                type="submit"
+                className="btn-small"
+                disabled={
+                  addingStage ||
+                  (selectedBundle
+                    ? bundleStageNamesToAdd.length === 0
+                    : !newStageName.trim())
+                }
+              >
+                {addingStage
+                  ? selectedBundle
+                    ? ru.drawer.addingStages
+                    : ru.drawer.addingStage
+                  : selectedBundle && bundleStageNamesToAdd.length > 0
+                    ? ru.drawer.addBundleStages(bundleStageNamesToAdd.length)
+                    : ru.drawer.addStage}
               </button>
             </form>
             <TaskDependenciesEditor
