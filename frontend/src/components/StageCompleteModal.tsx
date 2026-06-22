@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { SubStage } from '../types'
 import { ru } from '../locale/ru'
 import { stageDatesChanged, stagePlannedDates } from '../utils/stageComplete'
+import { StageEndDateInput } from './StageEndDateInput'
 
 interface Props {
   stage: SubStage
@@ -54,7 +55,11 @@ export function StageCompleteModal({ stage, onCancel, onConfirm, submitting }: P
           </label>
           <label>
             {ru.drawer.stageEndDate}
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <StageEndDateInput
+              startDate={startDate}
+              value={endDate}
+              onChange={setEndDate}
+            />
           </label>
           {datesEdited && (
             <>

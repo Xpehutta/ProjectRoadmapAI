@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { SubStage } from '../types'
 import { ru } from '../locale/ru'
 import { stageDatesChanged, stagePlannedDates, isStagePlanned } from '../utils/stageComplete'
+import { StageEndDateInput } from './StageEndDateInput'
 
 export type StageDateModalMode = 'shift' | 'plan' | 'correct'
 
@@ -83,7 +84,11 @@ export function StageShiftModal({ stage, initial, mode = 'shift', onCancel, onCo
           </label>
           <label>
             {ru.drawer.stageEndDate}
-            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <StageEndDateInput
+              startDate={startDate}
+              value={endDate}
+              onChange={setEndDate}
+            />
           </label>
           {mode === 'shift' && (
             <label>

@@ -21,6 +21,12 @@ export function followingStartAfterEnd(endDate: string): string | null {
   return fmtDate(addDays(end, 1))
 }
 
+/** Earliest allowed stage end when start is set (day after start). */
+export function minStageEndDate(startDate: string | null | undefined): string | undefined {
+  if (!startDate?.trim()) return undefined
+  return followingStartAfterEnd(startDate.trim()) ?? undefined
+}
+
 export function stageNeedsPrecedingEndFill(
   stages: SubStage[],
   stageIndex: number,

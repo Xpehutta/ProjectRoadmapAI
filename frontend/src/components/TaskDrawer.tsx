@@ -34,6 +34,7 @@ import {
   stageEffectiveEndDate,
   stageNeedsFollowingStartFill,
   stageNeedsPrecedingEndFill,
+  minStageEndDate,
 } from '../utils/subStageDates'
 import { stageDisplayNumber } from '../utils/subStageDeps'
 import { indicativeRangeChanged, buildStageShiftEntry, stageDatesChanged, stagePlannedDates, isStagePlanned } from '../utils/stageComplete'
@@ -56,6 +57,7 @@ import {
 } from '../utils/effortCalculator'
 import { PlannedEffortCalculator } from './PlannedEffortCalculator'
 import { NewStageDependencyFields } from './NewStageDependencyFields'
+import { StageEndDateInput } from './StageEndDateInput'
 import { StageFocusDependenciesEditor } from './StageFocusDependenciesEditor'
 import { TaskFieldCombobox } from './TaskFieldCombobox'
 import { TaskDependenciesEditor } from './TaskDependenciesEditor'
@@ -587,6 +589,17 @@ export function TaskDrawer({ project, task }: Props) {
 
   const handleNewStageStartChange = (value: string) => {
     setNewStageStartDate(value)
+    const minEnd = minStageEndDate(value)
+    if (!minEnd) return
+    setNewStageEndDate((end) => {
+      if (!end) return end
+      return end < minEnd ? minEnd : end
+    })
+  }
+
+  const applyNewStageStartDate = (chosen: string) => {
+    setNewStageStartDate(chosen)
+    setNewStageEndDate((end) => end || minStageEndDate(chosen) || '')
   }
 
   const handleNewStageStartBlur = async () => {
@@ -600,7 +613,7 @@ export function TaskDrawer({ project, task }: Props) {
           suggestion.date,
           ru.drawer.stageStartDate
         )
-        if (chosen) setNewStageStartDate(chosen)
+        if (chosen) applyNewStageStartDate(chosen)
       }
       return
     }
@@ -616,7 +629,7 @@ export function TaskDrawer({ project, task }: Props) {
           suggestion.date,
           ru.drawer.stageStartDate
         )
-        if (chosen) setNewStageStartDate(chosen)
+        if (chosen) applyNewStageStartDate(chosen)
       }
       return
     }
@@ -628,7 +641,7 @@ export function TaskDrawer({ project, task }: Props) {
       fill.proposedStart,
       ru.drawer.stageStartDate
     )
-    if (chosen) setNewStageStartDate(chosen)
+    if (chosen) applyNewStageStartDate(chosen)
   }
 
   const handleStageDateBlur = async (
@@ -1222,11 +1235,11 @@ export function TaskDrawer({ project, task }: Props) {
                     </label>
                     <label className="phase-date-field">
                       <span>{ru.drawer.stageEndDate}</span>
-                      <input
-                        key={`${s.id}-end-${s.end_date ?? s.due_date}-${stageDateInputReset}`}
-                        type="date"
+                      <StageEndDateInput
+                        startDate={s.start_date}
+                        inputKey={`${s.id}-end-${s.end_date ?? s.due_date}-${stageDateInputReset}`}
                         defaultValue={s.end_date ?? s.due_date ?? ''}
-                        onBlur={(e) => handleStageDateBlur(s, 'end_date', e.target.value, stageIndex)}
+                        onBlur={(value) => void handleStageDateBlur(s, 'end_date', value, stageIndex)}
                       />
                     </label>
                     {s.note && s.note !== stageEffectiveEndDate(s) && (
@@ -1334,10 +1347,11 @@ export function TaskDrawer({ project, task }: Props) {
               </label>
               <label>
                 {ru.drawer.stageEndDate}
-                <input
-                  type="date"
+                <StageEndDateInput
+                  key={`new-stage-end-${newStageStartDate}`}
+                  startDate={newStageStartDate}
                   value={newStageEndDate}
-                  onChange={(e) => setNewStageEndDate(e.target.value)}
+                  onChange={setNewStageEndDate}
                 />
               </label>
               <button type="submit" className="btn-small" disabled={addingStage || !newStageName.trim()}>
