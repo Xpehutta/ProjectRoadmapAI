@@ -90,9 +90,24 @@ SEED_REPLACE=1 docker compose run --rm backend python -m app.seed
 | backend | 8000 | REST API на FastAPI (только внутри Docker) |
 | db | 5432 | PostgreSQL 16 (только внутри Docker) |
 
-```
-Browser → nginx:8080 → /api/* → backend:8000 → PostgreSQL
-                      → /*     → статические файлы React
+```mermaid
+flowchart TB
+  Browser["Браузер\nlocalhost:8080"]
+
+  subgraph compose ["Docker Compose"]
+    Nginx["nginx :8080"]
+    SPA["React SPA\nстатика"]
+    Backend["backend :8000\nFastAPI REST API"]
+    DB[("PostgreSQL 16\n:5432")]
+  end
+
+  Data["data/\nimport-data (ro)"]
+
+  Browser --> Nginx
+  Nginx -->|"/api/*"| Backend
+  Nginx -->|"/*"| SPA
+  Backend --> DB
+  Data -.->|seed / импорт| Backend
 ```
 
 Каталог `data/` монтируется только для чтения в `/app/import-data` в контейнере backend для seed-импорта.
