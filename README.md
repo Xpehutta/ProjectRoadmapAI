@@ -91,6 +91,8 @@ SEED_REPLACE=1 docker compose run --rm backend python -m app.seed
 | nginx | 8080 | React SPA + прокси API (открывайте в браузере) |
 | backend | 8000 | REST API на FastAPI (только внутри Docker) |
 | db | 15432 (хост) / 5432 (внутри Docker) | PostgreSQL 16 |
+| mailpit | 8025 (UI) / 1025 (SMTP) | Локальный приёмник писем для email-уведомлений (опционально) |
+| GigaChat API | — | Внешний LLM; вызов из backend по `GIGACHAT_CREDENTIALS` |
 
 ```mermaid
 flowchart TB
@@ -98,19 +100,39 @@ flowchart TB
 
   subgraph compose ["Docker Compose"]
     Nginx["nginx :8080"]
-    SPA["React SPA\nстатика"]
+    SPA["React SPA\nProjectChat 💬"]
     Backend["backend :8000\nFastAPI REST API"]
     DB[("PostgreSQL 16\n:5432")]
+    Mailpit["mailpit\nSMTP / UI"]
   end
+
+  GigaChat["GigaChat API\n(Sber)"]
 
   Data["data/\nimport-data (ro)"]
 
   Browser --> Nginx
   Nginx -->|"/api/*"| Backend
   Nginx -->|"/*"| SPA
+  SPA -->|"/api/projects/{id}/chat"| Backend
   Backend --> DB
+  Backend -->|"project_context\n(JSON снимок проекта)"| GigaChat
+  Backend -->|"SMTP"| Mailpit
   Data -.->|seed / импорт| Backend
 ```
+
+### ИИ-ассистент (GigaChat)
+
+Чат в правом нижнем углу проекта (`ProjectChat.tsx`) отправляет запросы на `POST /api/projects/{id}/chat`. Backend не хранит историю диалога в БД — в GigaChat уходит текущая переписка из браузера плюс **системный промпт** со снимком проекта.
+
+| Компонент | Назначение |
+|-----------|------------|
+| `frontend/src/components/ProjectChat.tsx` | UI чата, подсказки вопросов |
+| `backend/app/routers/chat.py` | API статуса и чата |
+| `backend/app/services/project_context.py` | Сбор JSON из PostgreSQL: задачи, этапы, сдвиги (`shifts`, `stage_shifts`), аудит, комментарии |
+| `backend/app/services/project_agent.py` | Клиент SDK `gigachat`, системный промпт, вызов модели |
+| `.env` | `GIGACHAT_CREDENTIALS`, `GIGACHAT_MODEL`, опционально `GIGACHAT_BASE_URL` |
+
+Поток запроса: **БД → project_context → GigaChat → ответ в UI**. Секреты только на backend; браузер обращается к `/api`, не к GigaChat напрямую.
 
 Каталог `data/` монтируется только для чтения в `/app/import-data` в контейнере backend для seed-импорта.
 
