@@ -1,5 +1,6 @@
 import { useUIStore } from '../stores/uiStore'
-import { ru, VIEW_OPTIONS } from '../locale/ru'
+import { useNow } from '../hooks/useNow'
+import { formatLocaleDateTime, ru, VIEW_OPTIONS } from '../locale/ru'
 
 interface Props {
   projectName: string
@@ -27,7 +28,9 @@ export function Toolbar({
   const showShiftComments = useUIStore((s) => s.showShiftComments)
   const setShowShiftComments = useUIStore((s) => s.setShowShiftComments)
   const setShowAuditModal = useUIStore((s) => s.setShowAuditModal)
+  const setShowNotificationModal = useUIStore((s) => s.setShowNotificationModal)
   const userName = useUIStore((s) => s.userName)
+  const now = useNow()
 
   return (
     <header className="toolbar">
@@ -41,6 +44,9 @@ export function Toolbar({
           {ru.toolbar.projects}
         </button>
         <h1>{projectName}</h1>
+        <time className="toolbar-datetime" dateTime={now.toISOString()}>
+          {formatLocaleDateTime(now)}
+        </time>
         <span className="user-badge">{userName}</span>
       </div>
       <div className="toolbar-center">
@@ -83,6 +89,7 @@ export function Toolbar({
         <button onClick={onManageComponents}>{ru.components.toolbar}</button>
         <button onClick={onManageReleases}>{ru.releases.toolbar}</button>
         <button onClick={onManageGoals}>{ru.goals.toolbar}</button>
+        <button onClick={() => setShowNotificationModal(true)}>{ru.toolbar.notifications}</button>
         <button onClick={() => setShowAuditModal(true)}>{ru.toolbar.audit}</button>
       </div>
     </header>

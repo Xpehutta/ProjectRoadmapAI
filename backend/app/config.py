@@ -36,5 +36,15 @@ class Settings(BaseSettings):
     gigachat_max_tokens: int = 2048
     gigachat_verify_ssl: bool = False
 
+    # Email-уведомления об изменениях задач
+    notifications_enabled: bool = False
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = True
+    notification_from_email: str | None = None
+    app_base_url: str = "http://localhost:8080"
+
 
 settings = Settings()

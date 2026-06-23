@@ -61,6 +61,26 @@ export const ru = {
     categoryGroups: 'Группы по категориям',
     categories: 'Категории',
     audit: 'Журнал аудита',
+    notifications: 'Уведомления',
+  },
+
+  notifications: {
+    title: 'Email-уведомления',
+    description:
+      'Получайте письма при изменении задач в этом проекте: сроки, статусы, этапы, стоимость и комментарии.',
+    emailLabel: 'Email',
+    emailPlaceholder: 'you@company.ru',
+    subscribe: 'Подписаться',
+    subscribing: 'Подписка…',
+    unsubscribe: 'Отписаться',
+    unsubscribing: 'Отписка…',
+    subscribed: 'Вы подписаны на уведомления по этому проекту.',
+    notSubscribed: 'Подписка не оформлена.',
+    checking: 'Проверка…',
+    close: 'Закрыть',
+    error: 'Не удалось изменить подписку',
+    notConfigured:
+      'Отправка писем не настроена. Задайте NOTIFICATIONS_ENABLED=true, SMTP_HOST и NOTIFICATION_FROM_EMAIL в .env и перезапустите docker compose. Локально: SMTP_HOST=mailpit, порт 1025, UI писем — http://localhost:8025',
   },
 
   chat: {

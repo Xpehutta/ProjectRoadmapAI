@@ -7,9 +7,14 @@ from typing import Any
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import AuditEvent, Category, Comment, Dependency, Goal, Milestone, Project, ProjectComponent, Release, Task
+from app.models import AuditEvent, AuditEventType, Category, Comment, Dependency, Goal, Milestone, Project, ProjectComponent, Release, Task
 from app.models import Dependency as DepModel
 from app.services.components import component_to_out, load_component
+from app.services.stage_audit import (
+    is_shift_comment,
+    stage_shift_from_event,
+    task_date_shift_from_event,
+)
 from app.services.tasks import task_to_out
 
 
@@ -19,6 +24,153 @@ def _drop_none(data: dict[str, Any]) -> dict[str, Any]:
 
 MAX_COMMENTS_PER_TASK = 15
 MAX_HISTORY_PER_TASK = 25
+MAX_STAGE_SHIFTS_PER_TASK = 40
+MAX_DATE_SHIFTS_PER_TASK = 40
+
+
+def _shift_targets(
+    event_task_id: int,
+    *,
+    task_component_map: dict[int, int | None],
+    component_to_task_ids: dict[int, list[int]],
+) -> list[int]:
+    component_id = task_component_map.get(event_task_id)
+    if component_id:
+        return component_to_task_ids.get(component_id, [event_task_id])
+    return [event_task_id]
+
+
+def _append_shift_entry(
+    buckets: dict[int, list[dict[str, Any]]],
+    seen: dict[int, set[tuple[Any, ...]]],
+    *,
+    task_ids: list[int],
+    targets: list[int],
+    entry: dict[str, Any],
+    dedupe_key: tuple[Any, ...],
+    limit: int,
+) -> None:
+    for task_id in targets:
+        if task_id not in buckets:
+            continue
+        if dedupe_key in seen[task_id]:
+            continue
+        if len(buckets[task_id]) >= limit:
+            continue
+        seen[task_id].add(dedupe_key)
+        buckets[task_id].append(entry)
+
+
+def _load_task_shifts(
+    db: Session,
+    task_ids: list[int],
+    *,
+    task_component_map: dict[int, int | None],
+    component_to_task_ids: dict[int, list[int]],
+) -> tuple[dict[int, list[dict[str, Any]]], dict[int, list[dict[str, Any]]]]:
+    if not task_ids:
+        return {}, {}
+
+    stage_shifts_by_task: dict[int, list[dict[str, Any]]] = {tid: [] for tid in task_ids}
+    date_shifts_by_task: dict[int, list[dict[str, Any]]] = {tid: [] for tid in task_ids}
+    stage_seen: dict[int, set[tuple[Any, ...]]] = {tid: set() for tid in task_ids}
+    date_seen: dict[int, set[tuple[Any, ...]]] = {tid: set() for tid in task_ids}
+    for event in (
+        db.query(AuditEvent)
+        .filter(
+            AuditEvent.task_id.in_(task_ids),
+            AuditEvent.event_type == AuditEventType.dates,
+        )
+        .order_by(AuditEvent.created_at.desc())
+        .all()
+    ):
+        targets = _shift_targets(
+            event.task_id,
+            task_component_map=task_component_map,
+            component_to_task_ids=component_to_task_ids,
+        )
+        stage_entry = stage_shift_from_event(event)
+        if stage_entry:
+            dedupe_key = (
+                stage_entry["at"],
+                stage_entry["stage_id"],
+                stage_entry["date_field"],
+                stage_entry.get("old"),
+                stage_entry.get("new"),
+            )
+            _append_shift_entry(
+                stage_shifts_by_task,
+                stage_seen,
+                task_ids=task_ids,
+                targets=targets,
+                entry=stage_entry,
+                dedupe_key=dedupe_key,
+                limit=MAX_STAGE_SHIFTS_PER_TASK,
+            )
+            continue
+
+        date_entry = task_date_shift_from_event(event)
+        if not date_entry:
+            continue
+        dedupe_key = (
+            date_entry["at"],
+            date_entry["field"],
+            date_entry.get("old"),
+            date_entry.get("new"),
+        )
+        _append_shift_entry(
+            date_shifts_by_task,
+            date_seen,
+            task_ids=task_ids,
+            targets=targets,
+            entry=date_entry,
+            dedupe_key=dedupe_key,
+            limit=MAX_DATE_SHIFTS_PER_TASK,
+        )
+    return stage_shifts_by_task, date_shifts_by_task
+
+
+def _shift_comments(comments: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+    if not comments:
+        return None
+    filtered = [c for c in comments if is_shift_comment(c.get("text", ""))]
+    return filtered or None
+
+
+def _build_project_shifts_summary(task_summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    recent: list[dict[str, Any]] = []
+    stage_count = 0
+    task_date_count = 0
+    comment_count = 0
+
+    for task in task_summaries:
+        task_id = task["id"]
+        task_name = task["name"]
+        for entry in task.get("stage_shifts") or []:
+            stage_count += 1
+            recent.append({"kind": "stage", "task_id": task_id, "task_name": task_name, **entry})
+        for entry in task.get("date_shifts") or []:
+            task_date_count += 1
+            recent.append({"kind": "task_date", "task_id": task_id, "task_name": task_name, **entry})
+        for entry in task.get("shift_comments") or []:
+            comment_count += 1
+            recent.append({"kind": "comment", "task_id": task_id, "task_name": task_name, **entry})
+
+    total = stage_count + task_date_count + comment_count
+    if total == 0:
+        return {"any": False, "total": 0}
+
+    recent.sort(key=lambda item: item.get("at") or "", reverse=True)
+    return _drop_none(
+        {
+            "any": True,
+            "total": total,
+            "stage_shift_count": stage_count or None,
+            "task_date_shift_count": task_date_count or None,
+            "shift_comment_count": comment_count or None,
+            "recent": recent[:30],
+        }
+    )
 
 
 def _comment_entry(comment: Comment) -> dict[str, Any]:
@@ -78,6 +230,8 @@ def _task_summary(
     *,
     comments: list[dict[str, Any]] | None = None,
     history: list[dict[str, Any]] | None = None,
+    stage_shifts: list[dict[str, Any]] | None = None,
+    date_shifts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     stages = [
         _drop_none(
@@ -103,6 +257,7 @@ def _task_summary(
         )
         for p in task_out.predecessors
     ]
+    shift_comments = _shift_comments(comments)
     return _drop_none(
         {
             "id": task_out.id,
@@ -135,7 +290,10 @@ def _task_summary(
             "risks": task_out.risks,
             "custom_fields": task_out.custom_fields or None,
             "comments": comments or None,
+            "shift_comments": shift_comments,
             "history": history or None,
+            "stage_shifts": stage_shifts or None,
+            "date_shifts": date_shifts or None,
         }
     )
 
@@ -170,19 +328,36 @@ def build_project_context(db: Session, project_id: int) -> dict[str, Any]:
     category_map = {c.id: c.name for c in categories}
     task_outs = [task_to_out(t) for t in tasks]
     task_ids = [t.id for t in tasks]
+    task_component_map = {t.id: t.component_id for t in tasks}
+    component_to_task_ids: dict[int, list[int]] = {}
+    for t in tasks:
+        if t.component_id:
+            component_to_task_ids.setdefault(t.component_id, []).append(t.id)
+
     comments_by_task, history_by_task = _load_task_activity(db, task_ids)
+    stage_shifts_by_task, date_shifts_by_task = _load_task_shifts(
+        db,
+        task_ids,
+        task_component_map=task_component_map,
+        component_to_task_ids=component_to_task_ids,
+    )
 
     task_summaries = []
     for t in task_outs:
+        task_comments = comments_by_task.get(t.id) or None
         summary = _task_summary(
             t,
-            comments=comments_by_task.get(t.id) or None,
+            comments=task_comments,
             history=history_by_task.get(t.id) or None,
+            stage_shifts=stage_shifts_by_task.get(t.id) or None,
+            date_shifts=date_shifts_by_task.get(t.id) or None,
         )
         cid = summary.get("category_id")
         if cid and cid in category_map:
             summary["category"] = category_map[cid]
         task_summaries.append(summary)
+
+    shifts_summary = _build_project_shifts_summary(task_summaries)
 
     return _drop_none(
         {
@@ -227,6 +402,7 @@ def build_project_context(db: Session, project_id: int) -> dict[str, Any]:
                 for c in (component_to_out(load_component(db, comp.id) or comp) for comp in components)
             ]
             or None,
+            "shifts": shifts_summary,
             "tasks": task_summaries,
         }
     )

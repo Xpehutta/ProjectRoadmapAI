@@ -2,7 +2,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.context import user_name_var
-from app.routers import categories, chat, comments, components, dependencies, goals, milestones, projects, releases, stage_templates, sub_stages, table_columns, tasks
+from app.routers import categories, chat, comments, components, dependencies, goals, milestones, notifications, projects, releases, stage_templates, sub_stages, table_columns, tasks
+from app.services import notifications as _notifications  # noqa: F401 — регистрирует after_commit
 
 app = FastAPI(title="Project Manager Roadmap API", version="1.0.0")
 
@@ -32,6 +33,7 @@ def health():
 
 
 app.include_router(chat.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(components.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")

@@ -27,6 +27,12 @@ services:
       db:
         condition: service_healthy
 
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"   # веб-интерфейс входящих писем
+      - "1025:1025"   # SMTP (для backend внутри Docker: host mailpit)
+
   nginx:
     build:
       context: .

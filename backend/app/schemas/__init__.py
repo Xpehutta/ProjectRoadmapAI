@@ -419,3 +419,13 @@ class ChatResponse(BaseModel):
 class ChatStatusResponse(BaseModel):
     configured: bool
     model: str | None = None
+
+
+class NotificationSubscribe(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+
+
+class NotificationStatusResponse(BaseModel):
+    subscribed: bool
+    email: str | None = None
+    notifications_configured: bool

@@ -23,8 +23,14 @@ SYSTEM_PROMPT = """Ты — ИИ-ассистент дорожной карты 
 - Стоимость: planned_cost — плановая стоимость задачи, actual_cost — фактическая стоимость.
 - Трудозатраты: planned_effort — плановые, actual_effort — фактические (часы/чел.-дни).
 - custom_fields — дополнительные пользовательские поля задачи.
-- history — журнал изменений задачи. Сдвиг дат этапа: field вида `sub_stage:{id}:{имя этапа}.start_date` или `.end_date` (old → new).
-- comments — комментарии к задаче; при сдвиге этапа часто начинаются с «Этап «…»» или «Скорректированы сроки этапа».
+- shifts — сводка по всему проекту: any (были ли сдвиги), total, stage_shift_count, task_date_shift_count, shift_comment_count, recent (последние события).
+- stage_shifts — сдвиги дат этапов в задаче: stage_name, date_field, old, new, days, days_abs, direction.
+- date_shifts — сдвиги сроков задачи: field (start_date/end_date/indicative_start/indicative_end), old, new, days.
+- shift_comments — комментарии о переносах сроков (этап «…», сдвиг, перенос и т.п.).
+- history — полный журнал изменений задачи.
+- comments — все комментарии к задаче.
+- На вопрос «были ли сдвиги» смотри shifts.any и shifts.recent; если any=false — сдвигов в БД нет (визуальные стрелки только в браузере не учитываются).
+- На вопрос «на сколько дней сдвинулся этап» отвечай по stage_shifts: days_abs, направление, old→new.
 
 Контекст проекта (JSON):
 {project_context}"""

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.context import user_name_var
 from app.models import AuditEvent, AuditEventType, Task
+from app.services.notification_batch import PendingTaskChange, queue_task_change
 
 
 def _serialize(value) -> str | None:
@@ -41,6 +42,20 @@ def log_change(
         new_value=new_s,
     )
     db.add(event)
+    event_type_value = event_type.value if hasattr(event_type, "value") else str(event_type)
+    queue_task_change(
+        db,
+        PendingTaskChange(
+            task_id=task.id,
+            project_id=task.project_id,
+            task_name=task.name,
+            field=field,
+            old_value=old_s,
+            new_value=new_s,
+            actor=user_name or user_name_var.get(),
+            event_type=event_type_value,
+        ),
+    )
     return event
 
 

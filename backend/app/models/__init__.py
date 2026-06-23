@@ -75,6 +75,22 @@ class Project(Base):
     )
     releases: Mapped[list["Release"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     goals: Mapped[list["Goal"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    notification_subscriptions: Mapped[list["NotificationSubscription"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+
+
+class NotificationSubscription(Base):
+    __tablename__ = "notification_subscriptions"
+    __table_args__ = (UniqueConstraint("project_id", "email", name="uq_notification_project_email"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    project: Mapped["Project"] = relationship(back_populates="notification_subscriptions")
 
 
 class Category(Base):

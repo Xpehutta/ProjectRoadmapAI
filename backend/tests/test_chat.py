@@ -106,7 +106,22 @@ def test_system_prompt_includes_context_without_format_error():
     context = json.dumps({"tasks": [{"id": 42, "name": "Тест"}]}, ensure_ascii=False)
     content = _system_content(context)
     assert context in content
-    assert "sub_stage:{id}" in content
+    assert "shifts" in content
+
+
+def test_project_shifts_summary_from_task_date_change(client):
+    from app.services.project_context import build_project_context
+
+    test_client, session, project = client
+    task = session.query(Task).filter(Task.project_id == project.id).first()
+    test_client.patch(
+        f"/api/tasks/{task.id}",
+        json={"version": task.version, "end_date": "2026-12-31"},
+    )
+    ctx = build_project_context(session, project.id)
+    assert ctx["shifts"]["any"] is True
+    task_ctx = next(t for t in ctx["tasks"] if t["id"] == task.id)
+    assert len(task_ctx.get("date_shifts", [])) >= 1
 
 
 def test_chat_project_not_found(client):

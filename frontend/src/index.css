@@ -384,6 +384,14 @@ body { margin: 0; }
 }
 
 .toolbar h1 { margin: 0; font-size: 1.25rem; }
+
+.toolbar-datetime {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .toolbar-left, .toolbar-center, .toolbar-right {
   display: flex;
   align-items: center;

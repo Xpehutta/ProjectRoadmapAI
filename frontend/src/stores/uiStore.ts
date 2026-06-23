@@ -14,6 +14,7 @@ interface UIState {
   collapsedGroupKeys: string[]
   selectedTaskId: number | null
   showAuditModal: boolean
+  showNotificationModal: boolean
   ganttShowPriority: boolean
   ganttPriorityFilter: (number | 'none')[] | null
   ganttExpandedTaskIds: number[]
@@ -31,6 +32,7 @@ interface UIState {
   isGroupCollapsed: (key: string) => boolean
   setSelectedTaskId: (id: number | null) => void
   setShowAuditModal: (show: boolean) => void
+  setShowNotificationModal: (show: boolean) => void
   setGanttShowPriority: (show: boolean) => void
   setGanttPriorityFilter: (filter: (number | 'none')[] | null) => void
   toggleGanttTaskExpanded: (taskId: number) => void
@@ -55,6 +57,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   collapsedGroupKeys: [],
   selectedTaskId: null,
   showAuditModal: false,
+  showNotificationModal: false,
   ganttShowPriority: true,
   ganttPriorityFilter: null,
   ganttExpandedTaskIds: [],
@@ -88,6 +91,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   isGroupCollapsed: (key) => get().collapsedGroupKeys.includes(key),
   setSelectedTaskId: (id) => set({ selectedTaskId: id }),
   setShowAuditModal: (show) => set({ showAuditModal: show }),
+  setShowNotificationModal: (show) => set({ showNotificationModal: show }),
   setGanttShowPriority: (show) => set({ ganttShowPriority: show }),
   setGanttPriorityFilter: (filter) => set({ ganttPriorityFilter: filter }),
   toggleGanttTaskExpanded: (taskId) =>

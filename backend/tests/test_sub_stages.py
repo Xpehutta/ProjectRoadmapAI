@@ -387,3 +387,14 @@ def test_stage_date_shift_logged_in_audit_and_context(client):
     task_ctx = next(t for t in ctx["tasks"] if t["id"] == task.id)
     assert any("Загрузка" in (h.get("field") or "") for h in task_ctx.get("history", []))
     assert any("Этап" in c["text"] for c in task_ctx.get("comments", []))
+    shifts = task_ctx.get("stage_shifts", [])
+    assert len(shifts) == 1
+    assert shifts[0]["stage_name"] == "Загрузка"
+    assert shifts[0]["days"] == 10
+    assert shifts[0]["days_abs"] == 10
+    assert shifts[0]["direction"] == "later"
+    assert shifts[0]["old"] == "2024-03-10"
+    assert shifts[0]["new"] == "2024-03-20"
+
+    assert ctx["shifts"]["any"] is True
+    assert ctx["shifts"]["stage_shift_count"] == 1

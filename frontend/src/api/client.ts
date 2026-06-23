@@ -20,6 +20,7 @@ import type {
 import { ru } from '../locale/ru'
 
 const USER_KEY = 'roadmap-user-name'
+const NOTIFICATION_EMAIL_KEY = 'roadmap-notification-email'
 
 export function getUserName(): string {
   return localStorage.getItem(USER_KEY) || ''
@@ -27,6 +28,14 @@ export function getUserName(): string {
 
 export function setUserName(name: string): void {
   localStorage.setItem(USER_KEY, name)
+}
+
+export function getNotificationEmail(): string {
+  return localStorage.getItem(NOTIFICATION_EMAIL_KEY) || ''
+}
+
+export function setNotificationEmail(email: string): void {
+  localStorage.setItem(NOTIFICATION_EMAIL_KEY, email)
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -229,4 +238,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ messages }),
     }),
+  getNotificationStatus: (projectId: number, email: string) =>
+    request<{ subscribed: boolean; email: string | null; notifications_configured: boolean }>(
+      `/api/projects/${projectId}/notifications/status?email=${encodeURIComponent(email)}`
+    ),
+  subscribeNotifications: (projectId: number, email: string) =>
+    request<{ subscribed: boolean; email: string | null; notifications_configured: boolean }>(
+      `/api/projects/${projectId}/notifications/subscribe`,
+      { method: 'POST', body: JSON.stringify({ email }) }
+    ),
+  unsubscribeNotifications: (projectId: number, email: string) =>
+    request<{ subscribed: boolean; email: string | null; notifications_configured: boolean }>(
+      `/api/projects/${projectId}/notifications/subscribe?email=${encodeURIComponent(email)}`,
+      { method: 'DELETE' }
+    ),
 }

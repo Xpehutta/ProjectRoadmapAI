@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AuditModal } from './components/AuditModal'
+import { NotificationModal } from './components/NotificationModal'
 import { BacklogView } from './components/BacklogView'
 import { CategoryManager } from './components/CategoryManager'
 import { ComponentManager } from './components/ComponentManager'
@@ -40,6 +41,7 @@ function App() {
   const viewMode = useUIStore((s) => s.viewMode)
   const selectedTaskId = useUIStore((s) => s.selectedTaskId)
   const showAuditModal = useUIStore((s) => s.showAuditModal)
+  const showNotificationModal = useUIStore((s) => s.showNotificationModal)
   const hasPendingChanges = useHasAnyPending()
   const createProject = useCreateProject()
   const importProject = useImportProject()
@@ -188,6 +190,7 @@ function App() {
         <GoalManager project={project} onClose={() => setShowGoals(false)} />
       )}
       {showAuditModal && <AuditModal projectId={project.id} />}
+      {showNotificationModal && <NotificationModal projectId={project.id} />}
       {stageStatusPromptModal}
       <SaveChangesBar projectId={project.id} />
       <ProjectChat projectId={project.id} projectName={project.name} />

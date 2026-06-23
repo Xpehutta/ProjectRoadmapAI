@@ -72,6 +72,28 @@ def test_promote_task_creates_shared_component(client):
     assert listed[0]["usage_count"] == 2
 
 
+def test_component_stage_shift_visible_in_context_for_all_usages(client):
+    from app.services.project_context import build_project_context
+
+    test_client, session, project, task_a, task_b = client
+    promote = test_client.post(f"/api/tasks/{task_a.id}/promote-to-component")
+    component_id = promote.json()["id"]
+    test_client.post(f"/api/tasks/{task_b.id}/link-component/{component_id}")
+
+    stage_id = promote.json()["sub_stages"][0]["id"]
+    test_client.patch(
+        f"/api/tasks/{task_a.id}/sub-stages/{stage_id}",
+        json={"end_date": "2024-05-15"},
+    )
+
+    ctx = build_project_context(session, project.id)
+    for task_id in (task_a.id, task_b.id):
+        task_ctx = next(t for t in ctx["tasks"] if t["id"] == task_id)
+        shifts = task_ctx.get("stage_shifts", [])
+        assert len(shifts) == 1
+        assert shifts[0]["stage_name"] == "Этап 1"
+
+
 def test_create_component_and_link(client):
     test_client, session, project, task_a, _task_b = client
     created = test_client.post(
