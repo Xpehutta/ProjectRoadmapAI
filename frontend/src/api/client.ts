@@ -222,4 +222,11 @@ export const api = {
     request<void>(`/api/projects/${projectId}/table-columns/${encodeURIComponent(columnKey)}`, {
       method: 'DELETE',
     }),
+  getChatStatus: (projectId: number) =>
+    request<{ configured: boolean; model: string | null }>(`/api/projects/${projectId}/chat/status`),
+  sendChatMessage: (projectId: number, messages: { role: 'user' | 'assistant'; content: string }[]) =>
+    request<{ reply: string; model: string }>(`/api/projects/${projectId}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ messages }),
+    }),
 }

@@ -19,6 +19,7 @@ from app.services.stage_internal_links import (
 )
 from app.services.sub_stage_delete import delete_sub_stage as remove_sub_stage
 from app.services.sub_stage_deps import validate_predecessor_stage_ids
+from app.services.stage_audit import log_stage_date_changes
 from app.services.stage_indicative import recompute_actual_dates, recompute_indicative_dates
 from app.services.tasks import load_task, task_to_out
 
@@ -159,6 +160,7 @@ def update_sub_stage(
         pred_patch = updates.pop("predecessor_stage_ids", None)
         if pred_patch is not None:
             pred_patch = validate_predecessor_stage_ids(stage_id, pred_patch, task.component.sub_stages or [])
+        log_stage_date_changes(db, task, stage, updates)
         for k, v in updates.items():
             setattr(stage, k, v)
         if pred_patch is not None:
@@ -188,6 +190,7 @@ def update_sub_stage(
     pred_patch = updates.pop("predecessor_stage_ids", None)
     if pred_patch is not None:
         pred_patch = validate_predecessor_stage_ids(stage_id, pred_patch, all_stages)
+    log_stage_date_changes(db, task, stage, updates)
     for k, v in updates.items():
         setattr(stage, k, v)
     if pred_patch is not None:

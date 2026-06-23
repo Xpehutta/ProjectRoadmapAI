@@ -46,6 +46,7 @@
 - **Импорт из Excel (seed)** — проект **«Витрины данных»** заполняется из `data/DataMarts.xlsx` (столбец Excel **БВ** → категория / столбец **Область** в таблице, **Субпродукт** → **Витрина**, использования по строкам, общие компоненты по Источнику)
 - **История и аудит** — неизменяемый журнал изменений дат, стоимости, трудозатрат и статусов
 - **Комментарии** — активность по задаче с метками времени
+- **ИИ-ассистент** — чат-бот на GigaChat для вопросов о текущем проекте (задачи, сроки, этапы, стоимость, зависимости, сдвиги дат, общие источники)
 
 ## Руководство пользователя
 
@@ -89,7 +90,7 @@ SEED_REPLACE=1 docker compose run --rm backend python -m app.seed
 |--------|------|----------|
 | nginx | 8080 | React SPA + прокси API (открывайте в браузере) |
 | backend | 8000 | REST API на FastAPI (только внутри Docker) |
-| db | 5432 | PostgreSQL 16 (только внутри Docker) |
+| db | 15432 (хост) / 5432 (внутри Docker) | PostgreSQL 16 |
 
 ```mermaid
 flowchart TB
@@ -120,7 +121,7 @@ flowchart TB
 ```bash
 cd backend
 pip install -r requirements.txt
-export DATABASE_URL=postgresql://roadmap:roadmap@localhost:5432/roadmap
+export DATABASE_URL=postgresql+psycopg://roadmap:roadmap@localhost:15432/roadmap
 alembic upgrade head
 python -m app.seed
 uvicorn app.main:app --reload
@@ -142,6 +143,20 @@ Dev-сервер Vite проксирует `/api` на `http://localhost:8000`.
 cd backend
 pytest tests/
 ```
+
+### Проверка чат-бота (Jupyter)
+
+```bash
+python3 notebooks/install_deps.py   # установка в текущий Python
+jupyter notebook notebooks/test_chatbot.ipynb
+```
+
+Или из notebook: выполните ячейку **«Установка зависимостей»**.
+
+> Нужны зависимости из `notebooks/requirements.txt` (включая backend и `psycopg[binary]`).  
+> При ошибке импорта: `python3 notebooks/install_deps.py` и перезапуск kernel.
+
+Notebook проверяет `.env`, прямой вызов GigaChat, ассистента с демо-данными и (опционально) HTTP API / БД.
 
 ## Обзор API
 
@@ -169,6 +184,26 @@ pytest tests/
 | `GET /api/projects/{id}/audit` | Журнал аудита проекта |
 | `GET/POST /api/projects/{id}/releases` | CRUD релизов |
 | `GET/POST /api/projects/{id}/goals` | CRUD целей |
+| `GET /api/projects/{id}/chat/status` | Доступность ИИ-ассистента (GigaChat) |
+| `POST /api/projects/{id}/chat` | Вопрос ассистенту о проекте (тело: `{ "messages": [{ "role": "user", "content": "..." }] }`) |
+
+### ИИ-ассистент (GigaChat)
+
+В правом нижнем углу открытого проекта — кнопка **💬**. Ассистент отвечает на вопросы о **текущем** проекте, используя снимок данных из БД (задачи, этапы, вехи, релизы, цели, общие источники, зависимости, плановая/фактическая стоимость и трудозатраты, журнал изменений и комментарии). Реализация на базе официального SDK [`gigachat`](https://pypi.org/project/gigachat/).
+
+Примеры вопросов: «Сколько задач выполнено?», «Какие задачи в работе?», «Почему сдвинулся этап X?», «Какая плановая стоимость по задаче Y?».
+
+Для работы укажите ключ GigaChat в файле `.env` в корне репозитория:
+
+```bash
+cp .env.example .env
+# отредактируйте .env — вставьте GIGACHAT_CREDENTIALS
+docker compose up --build
+```
+
+Docker Compose подключает `.env` к сервису `backend`; при локальном запуске backend тоже читает этот файл. Без ключа чат откроется, но поле ввода будет недоступно с подсказкой о настройке.
+
+> **Ограничения:** ассистент не видит несохранённые локальные изменения, стрелки зависимостей только из `sessionStorage` браузера и данные вне текущего проекта. Сдвиги этапов попадают в контекст через журнал аудита и комментарии (для старых сдвигов без записей в БД ответ может быть неполным).
 
 Для операций записи передавайте заголовок `X-User-Name` — он используется для атрибуции в аудите.
 
@@ -176,16 +211,30 @@ pytest tests/
 
 | Переменная | Значение по умолчанию |
 |------------|------------------------|
-| `DATABASE_URL` | `postgresql://roadmap:roadmap@db:5432/roadmap` |
+| `DATABASE_URL` | `postgresql+psycopg://roadmap:roadmap@db:5432/roadmap` |
 | `SEED_REPLACE` | Установите `1` при запуске seed, чтобы заменить существующий демо-проект |
+
+Секреты и настройки GigaChat — в **`.env`** (шаблон: `.env.example`):
+
+| Переменная | Описание |
+|------------|----------|
+| `GIGACHAT_CREDENTIALS` | API-ключ GigaChat (алиас: `GIGACHAT_API_KEY`) |
+| `GIGACHAT_MODEL` | `GigaChat`, `GigaChat-Pro` или `GigaChat-Max` (алиас: `MODEL`; по умолчанию `GigaChat`) |
+| `GIGACHAT_BASE_URL` | URL API (алиас: `GIGACHAT_API_URL`) |
+| `GIGACHAT_SCOPE` | OAuth scope (по умолчанию `GIGACHAT_API_PERS`) |
+| `GIGACHAT_TEMPERATURE` | Температура ответа (по умолчанию `0.2`) |
+| `GIGACHAT_MAX_TOKENS` | Лимит токенов ответа (по умолчанию `2048`) |
+| `GIGACHAT_VERIFY_SSL` | Проверка SSL (`true` / `false`; для dev часто `false`) |
 
 ## Структура проекта
 
 ```
-backend/          FastAPI, Alembic, импорт DataMarts и гибкий импорт
-frontend/         React + TypeScript (Vite), локаль ru.ts в src/locale/
+backend/          FastAPI, Alembic, импорт DataMarts, GigaChat-ассистент (project_agent.py)
+frontend/         React + TypeScript (Vite), ProjectChat.tsx, локаль ru.ts в src/locale/
+notebooks/        test_chatbot.ipynb — проверка GigaChat и API без UI
 data/             DataMarts.xlsx, stage_templates.json, Template_substages.numbers
 scripts/          extract_stage_templates.py — обновление JSON из Numbers-шаблона
 nginx/            Статика SPA + обратный прокси
+.env.example      Шаблон секретов GigaChat (скопируйте в .env)
 docker-compose.yml
 ```

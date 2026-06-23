@@ -400,3 +400,22 @@ class ProjectDetail(ProjectOut):
 class ConflictError(BaseModel):
     detail: str
     current: TaskOut
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1)
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    model: str
+
+
+class ChatStatusResponse(BaseModel):
+    configured: bool
+    model: str | None = None

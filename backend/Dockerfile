@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 ENV PYTHONPATH=/app
-ENV DATABASE_URL=postgresql://roadmap:roadmap@db:5432/roadmap
+ENV DATABASE_URL=postgresql+psycopg://roadmap:roadmap@db:5432/roadmap
 
 EXPOSE 8000
 

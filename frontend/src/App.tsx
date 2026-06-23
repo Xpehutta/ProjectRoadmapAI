@@ -12,6 +12,7 @@ import { TableView } from './components/TableView'
 import { TaskDrawer } from './components/TaskDrawer'
 import { TimelineView } from './components/TimelineView'
 import { Toolbar } from './components/Toolbar'
+import { ProjectChat } from './components/ProjectChat'
 import { ProjectStartPage } from './components/ProjectStartPage'
 import { SaveChangesBar } from './components/SaveChangesBar'
 import { UserNameModal } from './components/UserNameModal'
@@ -189,6 +190,7 @@ function App() {
       {showAuditModal && <AuditModal projectId={project.id} />}
       {stageStatusPromptModal}
       <SaveChangesBar projectId={project.id} />
+      <ProjectChat projectId={project.id} projectName={project.name} />
     </div>
   )
 }

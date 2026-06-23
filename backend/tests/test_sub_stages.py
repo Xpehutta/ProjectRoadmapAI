@@ -8,7 +8,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
-from app.models import Project, Task, TaskStatus
+from app.models import AuditEvent, Project, Task, TaskStatus
+from app.services.project_context import build_project_context
 
 
 @pytest.fixture
@@ -351,3 +352,38 @@ def test_delete_only_completed_stage_resets_completion(client):
     session.refresh(task)
     assert task.completion_pct == 0
     assert task.status.value != "done"
+
+
+def test_stage_date_shift_logged_in_audit_and_context(client):
+    test_client, session, task = client
+    create = test_client.post(
+        f"/api/tasks/{task.id}/sub-stages",
+        json={
+            "name": "Загрузка",
+            "sort_order": 0,
+            "start_date": "2024-03-01",
+            "end_date": "2024-03-10",
+            "is_indicative": True,
+        },
+    )
+    stage_id = create.json()["id"]
+    test_client.patch(
+        f"/api/tasks/{task.id}/sub-stages/{stage_id}",
+        json={"end_date": "2024-03-20"},
+    )
+    test_client.post(
+        f"/api/tasks/{task.id}/comments",
+        json={"body": "Этап «Загрузка»: перенос из-за задержки поставки"},
+    )
+
+    events = session.query(AuditEvent).filter(AuditEvent.task_id == task.id).all()
+    stage_shift = [e for e in events if e.field and "sub_stage:" in e.field and e.field.endswith(".end_date")]
+    assert len(stage_shift) == 1
+    assert stage_shift[0].old_value == "2024-03-10"
+    assert stage_shift[0].new_value == "2024-03-20"
+    assert "Загрузка" in stage_shift[0].field
+
+    ctx = build_project_context(session, task.project_id)
+    task_ctx = next(t for t in ctx["tasks"] if t["id"] == task.id)
+    assert any("Загрузка" in (h.get("field") or "") for h in task_ctx.get("history", []))
+    assert any("Этап" in c["text"] for c in task_ctx.get("comments", []))

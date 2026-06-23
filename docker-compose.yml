@@ -1,6 +1,8 @@
 services:
   db:
     image: postgres:16
+    ports:
+      - "15432:5432"  # доступ с хоста (notebook); не 5432 — часто занят локальным PostgreSQL
     environment:
       POSTGRES_USER: roadmap
       POSTGRES_PASSWORD: roadmap
@@ -15,8 +17,10 @@ services:
 
   backend:
     build: ./backend
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://roadmap:roadmap@db:5432/roadmap
+      DATABASE_URL: postgresql+psycopg://roadmap:roadmap@db:5432/roadmap
     volumes:
       - ./data:/app/import-data:ro
     depends_on:
