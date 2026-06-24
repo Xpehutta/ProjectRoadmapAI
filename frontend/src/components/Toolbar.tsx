@@ -44,6 +44,13 @@ export function Toolbar({
           {ru.toolbar.projects}
         </button>
         <h1>{projectName}</h1>
+        <button
+          type="button"
+          className={`toolbar-summary-report${viewMode === 'quarter_report' ? ' active' : ''}`}
+          onClick={() => setViewMode('quarter_report')}
+        >
+          {ru.toolbar.summaryReport}
+        </button>
         <time className="toolbar-datetime" dateTime={now.toISOString()}>
           {formatLocaleDateTime(now)}
         </time>

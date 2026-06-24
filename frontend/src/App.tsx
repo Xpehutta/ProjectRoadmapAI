@@ -7,6 +7,7 @@ import { ComponentManager } from './components/ComponentManager'
 import { GanttView } from './components/GanttView'
 import { GoalManager } from './components/GoalManager'
 import { KanbanView } from './components/KanbanView'
+import { QuarterReportView } from './components/QuarterReportView'
 import { ReleaseBoardView } from './components/ReleaseBoardView'
 import { ReleaseManager } from './components/ReleaseManager'
 import { TableView } from './components/TableView'
@@ -175,6 +176,7 @@ function App() {
         {viewMode === 'table' && <TableView project={project} />}
         {viewMode === 'backlog' && <BacklogView project={project} />}
         {viewMode === 'release_board' && <ReleaseBoardView project={project} />}
+        {viewMode === 'quarter_report' && <QuarterReportView project={project} />}
       </main>
       {selectedTask && <TaskDrawer project={project} task={selectedTask} />}
       {showCategories && (

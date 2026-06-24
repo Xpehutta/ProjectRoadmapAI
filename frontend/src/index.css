@@ -385,6 +385,29 @@ body { margin: 0; }
 
 .toolbar h1 { margin: 0; font-size: 1.25rem; }
 
+.toolbar-summary-report {
+  border: 1px solid #0d9488;
+  background: #f0fdfa;
+  color: #0f766e;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.toolbar-summary-report:hover {
+  background: #ccfbf1;
+  border-color: #0f766e;
+}
+
+.toolbar-summary-report.active {
+  background: #0d9488;
+  color: #fff;
+  border-color: #0d9488;
+}
+
 .toolbar-datetime {
   font-size: 0.8rem;
   color: #64748b;
@@ -2420,3 +2443,179 @@ body { margin: 0; }
     height: min(70vh, 520px);
   }
 }
+
+.quarter-report-view {
+  display: flex;
+  justify-content: center;
+  padding: 8px 12px 16px;
+  min-height: 0;
+}
+
+.quarter-report-sheet {
+  width: 100%;
+  max-width: 1120px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: calc(100vh - 140px);
+}
+
+.quarter-report-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #0f172a;
+}
+
+.quarter-report-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+
+.quarter-report-period {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.quarter-report-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.quarter-report-year {
+  width: 4.5rem;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.quarter-report-quarters .filter-chips button,
+.quarter-report-quarters button {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.quarter-report-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.quarter-report-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 10px 10px 8px;
+}
+
+.quarter-report-col h3 {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #334155;
+  flex-shrink: 0;
+}
+
+.quarter-report-count {
+  font-weight: 600;
+  color: #64748b;
+}
+
+.quarter-report-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.quarter-report-lines li {
+  padding: 3px 0;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.quarter-report-lines li:last-child {
+  border-bottom: none;
+}
+
+.quarter-report-line-btn {
+  text-align: left;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: normal;
+}
+
+.quarter-report-empty {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.quarter-report-loading {
+  margin: 0;
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .quarter-report-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .quarter-report-sheet {
+    max-height: none;
+  }
+
+  .quarter-report-col {
+    max-height: 220px;
+  }
+}
+
+@media print {
+  .quarter-report-view {
+    padding: 0;
+  }
+
+  .quarter-report-sheet {
+    max-height: none;
+    box-shadow: none;
+    border: none;
+    max-width: none;
+  }
+
+  .quarter-report-controls {
+    display: none;
+  }
+
+  .quarter-report-columns {
+    break-inside: avoid;
+  }
+
+  .quarter-report-line-btn {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+

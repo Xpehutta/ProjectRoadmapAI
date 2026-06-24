@@ -1,7 +1,7 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked'
 export type DependencyType = 'FS' | 'SS' | 'FF' | 'SF'
 export type AuditEventType = 'dates' | 'cost' | 'effort' | 'comment' | 'status' | 'other'
-export type ViewMode = 'gantt' | 'timeline' | 'kanban' | 'table' | 'backlog' | 'release_board'
+export type ViewMode = 'gantt' | 'timeline' | 'kanban' | 'table' | 'backlog' | 'release_board' | 'quarter_report'
 export type GroupingMode = 'color' | 'swimlane'
 export type ReleaseStatus = 'planned' | 'in_progress' | 'released'
 export type Moscow = 'must' | 'should' | 'could' | 'wont'

@@ -62,6 +62,7 @@ export const ru = {
     categories: 'Категории',
     audit: 'Журнал аудита',
     notifications: 'Уведомления',
+    summaryReport: 'Сводный отчет',
   },
 
   notifications: {
@@ -112,7 +113,20 @@ export const ru = {
     table: 'Таблица',
     backlog: 'Бэклог',
     release_board: 'Релизы',
-  } satisfies Record<ViewMode, string>,
+  } satisfies Record<Exclude<ViewMode, 'quarter_report'>, string>,
+
+  quarterReport: {
+    title: 'Квартальный отчёт-план',
+    pageTitle: (period: string) => `Отчёт-план · ${period}`,
+    year: 'Год',
+    quarterButton: (q: number) => `Q${q}`,
+    doneTitle: 'Сделано',
+    planTitle: 'План',
+    shiftsTitle: 'Сдвиги',
+    emptyDone: '—',
+    emptyPlan: '—',
+    emptyShifts: '—',
+  },
 
   gantt: {
     showPriority: 'Показывать приоритет',
@@ -584,10 +598,12 @@ export const ru = {
   locale: 'ru-RU',
 } as const
 
-export const VIEW_OPTIONS = (Object.keys(ru.views) as ViewMode[]).map((id) => ({
-  id,
-  label: ru.views[id],
-}))
+export const VIEW_OPTIONS = (Object.keys(ru.views) as Exclude<ViewMode, 'quarter_report'>[]).map(
+  (id) => ({
+    id,
+    label: ru.views[id],
+  })
+)
 
 export const STATUS_OPTIONS = (Object.keys(ru.status) as TaskStatus[]).map((id) => ({
   id,
