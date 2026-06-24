@@ -31,6 +31,14 @@ def _sync_stage_due_date(updates: dict) -> None:
         updates["due_date"] = updates["end_date"]
 
 
+def _apply_sub_stage_create_defaults(data: dict) -> None:
+    """Этап с датами по умолчанию участвует в индикативных сроках задачи."""
+    if data.get("is_indicative"):
+        return
+    if data.get("start_date") or data.get("end_date") or data.get("due_date"):
+        data["is_indicative"] = True
+
+
 def _apply_predecessor_validation(
     updates: dict,
     stage_id: int | None,
@@ -98,6 +106,7 @@ def create_sub_stage(task_id: int, payload: SubStageCreate, db: Session = Depend
         raise HTTPException(404, "Task not found")
     data = payload.model_dump()
     _sync_stage_due_date(data)
+    _apply_sub_stage_create_defaults(data)
     pred_ids = data.pop("predecessor_stage_ids", None)
     if task.component_id and task.component:
         existing = task.component.sub_stages or []

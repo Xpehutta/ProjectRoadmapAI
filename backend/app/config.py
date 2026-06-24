@@ -46,5 +46,12 @@ class Settings(BaseSettings):
     notification_from_email: str | None = None
     app_base_url: str = "http://localhost:8080"
 
+    # Безопасность / развёртывание
+    cors_origins: str = "http://localhost:8080,http://localhost:5173"
+    require_user_name: bool = False
+
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
 
 settings = Settings()

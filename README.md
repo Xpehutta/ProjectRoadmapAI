@@ -149,21 +149,38 @@ python -m app.seed
 uvicorn app.main:app --reload
 ```
 
+### Тесты
+
+```bash
+# Backend
+cd backend && pytest -q
+
+# Frontend (Vitest)
+cd frontend && npm test
+
+# Полная проверка
+./scripts/ci.sh
+```
+
+### Безопасность
+
+Приложение рассчитано на внутреннюю сеть или доверенный периметр. По умолчанию:
+
+| Переменная | По умолчанию | Назначение |
+|------------|--------------|------------|
+| `CORS_ORIGINS` | `http://localhost:8080,http://localhost:5173` | Список разрешённых origins для CORS |
+| `REQUIRE_USER_NAME` | `false` | Если `true`, запись в API без заголовка `X-User-Name` отклоняется |
+
+Имя пользователя передаётся в заголовке `X-User-Name` и используется в аудите; это не полноценная аутентификация. Для продакшена разместите API за reverse proxy с SSO или включите `REQUIRE_USER_NAME=true` и ограничьте `CORS_ORIGINS` доменом приложения.
+
 ### Frontend
 
 ```bash
 cd frontend
 npm install
 npm run dev
-```
-
-Dev-сервер Vite проксирует `/api` на `http://localhost:8000`.
-
-### Тесты
-
-```bash
-cd backend
-pytest tests/
+npm run lint    # ESLint
+npm test        # Vitest
 ```
 
 ### Проверка чат-бота (Jupyter)

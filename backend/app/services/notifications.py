@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import smtplib
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from email.message import EmailMessage
 
@@ -17,6 +18,8 @@ from app.models import NotificationSubscription, Project
 from app.services.notification_batch import PendingTaskChange, take_pending_changes
 
 logger = logging.getLogger(__name__)
+
+_delivery_fn: Callable[[list[PendingTaskChange]], None] | None = None
 
 _FIELD_LABELS: dict[str, str] = {
     "start_date": "дата начала",
@@ -166,8 +169,24 @@ def deliver_notifications(pending: list[PendingTaskChange]) -> None:
 
 
 def _deliver_in_background(pending: list[PendingTaskChange]) -> None:
+    if not pending:
+        return
+    if _delivery_fn is not None:
+        _delivery_fn(pending)
+        return
+    if not notifications_configured():
+        return
     thread = threading.Thread(target=deliver_notifications, args=(pending,), daemon=True)
     thread.start()
+
+
+def set_delivery_fn(fn: Callable[[list[PendingTaskChange]], None] | None) -> None:
+    global _delivery_fn
+    _delivery_fn = fn
+
+
+def reset_delivery_fn() -> None:
+    set_delivery_fn(None)
 
 
 @event.listens_for(Session, "after_commit")

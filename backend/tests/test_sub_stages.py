@@ -63,6 +63,7 @@ def test_create_sub_stage_with_start_and_end_dates(client):
     assert body["start_date"] == "2024-03-01"
     assert body["end_date"] == "2024-03-15"
     assert body["due_date"] == "2024-03-15"
+    assert body["is_indicative"] is True
 
 
 def test_update_sub_stage_end_syncs_due_date(client):

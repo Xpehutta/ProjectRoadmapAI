@@ -73,18 +73,18 @@ def test_subscribe_and_unsubscribe(client):
 def test_log_change_queues_notification_on_commit(client, monkeypatch):
     from app.models import AuditEventType
     from app.services.audit import log_change
+    from app.services.notifications import set_delivery_fn
 
     _, session, project = client
     task = session.query(Task).filter(Task.project_id == project.id).first()
     delivered: list = []
 
-    monkeypatch.setattr(
-        "app.services.notifications._deliver_in_background",
-        lambda pending: delivered.extend(pending),
-    )
-
-    log_change(session, task, AuditEventType.dates, "end_date", "2026-01-01", "2026-01-15")
-    session.commit()
+    set_delivery_fn(lambda pending: delivered.extend(pending))
+    try:
+        log_change(session, task, AuditEventType.dates, "end_date", "2026-01-01", "2026-01-15")
+        session.commit()
+    finally:
+        set_delivery_fn(None)
 
     assert len(delivered) == 1
     assert delivered[0].task_id == task.id

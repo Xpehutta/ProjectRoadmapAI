@@ -1,4 +1,5 @@
 import json
+import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from sqlalchemy.orm import joinedload
 from app.models import Dependency as DepModel
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=list[ProjectOut])
@@ -62,7 +64,11 @@ async def import_project(
         raise HTTPException(400, "Invalid JSON file") from exc
     except Exception as exc:
         db.rollback()
-        raise HTTPException(400, f"Import failed: {exc}") from exc
+        logger.exception("Project import failed for file %s", file.filename)
+        raise HTTPException(
+            400,
+            "Не удалось импортировать файл. Проверьте формат и соответствие столбцов.",
+        ) from exc
     return project
 
 
