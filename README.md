@@ -95,6 +95,7 @@ SEED_REPLACE=1 docker compose run --rm backend python -m app.seed
 | db | 15432 (хост) / 5432 (внутри Docker) | PostgreSQL 16 |
 | mailpit | 8025 (UI) / 1025 (SMTP) | Локальный приёмник писем для email-уведомлений (опционально) |
 | GigaChat API | — | Внешний LLM; вызов из backend по `GIGACHAT_CREDENTIALS` |
+| Jira Cloud | — | Внешний REST API; создание Epic при создании проекта (`JIRA_*` в `.env`) |
 
 ```mermaid
 flowchart TB
@@ -102,22 +103,25 @@ flowchart TB
 
   subgraph compose ["Docker Compose"]
     Nginx["nginx :8080"]
-    SPA["React SPA\nProjectChat 💬"]
+    SPA["React SPA\nстартовая страница · ProjectChat 💬"]
     Backend["backend :8000\nFastAPI REST API"]
     DB[("PostgreSQL 16\n:5432")]
     Mailpit["mailpit\nSMTP / UI"]
   end
 
   GigaChat["GigaChat API\n(Sber)"]
+  Jira["Jira Cloud REST API\nEpic при создании проекта"]
 
   Data["data/\nimport-data (ro)"]
 
   Browser --> Nginx
   Nginx -->|"/api/*"| Backend
   Nginx -->|"/*"| SPA
+  SPA -->|"/api/projects · /api/jira/status"| Backend
   SPA -->|"/api/projects/{id}/chat"| Backend
   Backend --> DB
   Backend -->|"project_context\n(JSON снимок проекта)"| GigaChat
+  Backend -->|"POST /rest/api/3/issue\n(Epic)"| Jira
   Backend -->|"SMTP"| Mailpit
   Data -.->|seed / импорт| Backend
 ```
@@ -135,6 +139,8 @@ flowchart TB
 | `.env` | `GIGACHAT_CREDENTIALS`, `GIGACHAT_MODEL`, опционально `GIGACHAT_BASE_URL` |
 
 Поток запроса: **БД → project_context → GigaChat → ответ в UI**. Секреты только на backend; браузер обращается к `/api`, не к GigaChat напрямую.
+
+Поток Jira: **стартовая страница → `/api/jira/status` → (опционально) `POST /api/projects` с `create_jira_epic` → Jira REST API → ключ Epic в PostgreSQL**. Токен Jira и URL хранятся только в `.env` на backend; браузер не обращается к Jira напрямую.
 
 Каталог `data/` монтируется только для чтения в `/app/import-data` в контейнере backend для seed-импорта.
 
