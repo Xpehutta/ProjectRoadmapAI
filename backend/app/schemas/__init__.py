@@ -378,13 +378,30 @@ class ProjectBase(BaseModel):
 
 
 class ProjectCreate(ProjectBase):
-    pass
+    create_jira_epic: bool = False
 
 
 class ProjectOut(ProjectBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    jira_epic_key: str | None = None
+    jira_epic_url: str | None = None
     created_at: datetime
+
+
+class JiraStatusResponse(BaseModel):
+    configured: bool
+    project_key: str | None = None
+
+
+class JiraEpicCreate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class JiraEpicOut(BaseModel):
+    key: str
+    url: str
 
 
 class ProjectDetail(ProjectOut):

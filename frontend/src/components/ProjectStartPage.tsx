@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
+import { JiraEpicOfferModal } from './JiraEpicOfferModal'
+import { DeleteProjectModal } from './DeleteProjectModal'
+import { useJiraStatus } from '../hooks/useJira'
 import { ru } from '../locale/ru'
 import type { Project, ProjectDetail } from '../types'
 
@@ -24,9 +27,13 @@ interface Props {
   creating?: boolean
   importing?: boolean
   importError?: string | null
+  deleting?: boolean
+  deleteError?: string | null
   onSelectProject: (id: number) => void
-  onCreateProject: (name: string, description: string) => void
+  onCreateProject: (name: string, description: string, createJiraEpic?: boolean) => void
   onImportProject: (file: File, name: string, description: string) => void
+  onDeleteProject: (projectId: number) => void
+  onDeleteDialogOpen?: () => void
   onRetryProjects?: () => void
   onEnter: () => void
 }
@@ -41,9 +48,13 @@ export function ProjectStartPage({
   creating,
   importing,
   importError,
+  deleting,
+  deleteError,
   onSelectProject,
   onCreateProject,
   onImportProject,
+  onDeleteProject,
+  onDeleteDialogOpen,
   onRetryProjects,
   onEnter,
 }: Props) {
@@ -55,8 +66,13 @@ export function ProjectStartPage({
   const [importName, setImportName] = useState('')
   const [importDescription, setImportDescription] = useState('')
   const [localImportError, setLocalImportError] = useState<string | null>(null)
+  const [pendingCreate, setPendingCreate] = useState<{ name: string; description: string } | null>(null)
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const wasImportingRef = useRef(false)
+  const wasCreatingRef = useRef(false)
+  const wasDeletingRef = useRef(false)
+  const { data: jiraStatus } = useJiraStatus()
 
   const taskCount = selectedProject?.tasks.length ?? 0
   const categoryCount = selectedProject?.categories.length ?? 0
@@ -66,11 +82,60 @@ export function ProjectStartPage({
   const submitCreate = (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || creating) return
-    onCreateProject(name.trim(), description.trim())
+    const trimmedName = name.trim()
+    const trimmedDescription = description.trim()
+    if (jiraStatus?.configured && jiraStatus.project_key) {
+      setPendingCreate({ name: trimmedName, description: trimmedDescription })
+      return
+    }
+    onCreateProject(trimmedName, trimmedDescription)
     setName('')
     setDescription('')
     setShowCreate(false)
   }
+
+  const finishCreate = (createJiraEpic: boolean) => {
+    if (!pendingCreate || creating) return
+    onCreateProject(pendingCreate.name, pendingCreate.description, createJiraEpic)
+  }
+
+  const cancelPendingCreate = () => {
+    if (creating) return
+    setPendingCreate(null)
+  }
+
+  useEffect(() => {
+    if (wasCreatingRef.current && !creating && !createError && pendingCreate) {
+      setName('')
+      setDescription('')
+      setShowCreate(false)
+      setPendingCreate(null)
+    }
+    wasCreatingRef.current = Boolean(creating)
+  }, [creating, createError, pendingCreate])
+
+  const deleteTaskCount =
+    projectToDelete && selectedProject?.id === projectToDelete.id ? taskCount : 0
+
+  const requestDelete = (project: Project, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    e?.preventDefault()
+    if (deleting) return
+    onDeleteDialogOpen?.()
+    setProjectToDelete(project)
+  }
+
+  const confirmDelete = () => {
+    if (!projectToDelete || deleting) return
+    onDeleteProject(projectToDelete.id)
+  }
+
+  useEffect(() => {
+    if (wasDeletingRef.current && !deleting && !deleteError) {
+      setProjectToDelete(null)
+    }
+    wasDeletingRef.current = Boolean(deleting)
+  }, [deleting, deleteError])
 
   const selectFile = useCallback((file: File) => {
     if (!isAcceptedFile(file)) {
@@ -115,6 +180,30 @@ export function ProjectStartPage({
 
   return (
     <div className="start-page">
+      {pendingCreate && jiraStatus?.project_key && (
+        <JiraEpicOfferModal
+          projectName={pendingCreate.name}
+          projectDescription={pendingCreate.description}
+          jiraProjectKey={jiraStatus.project_key}
+          creating={creating}
+          error={createError}
+          onConfirmWithEpic={() => finishCreate(true)}
+          onConfirmWithoutEpic={() => finishCreate(false)}
+          onCancel={cancelPendingCreate}
+        />
+      )}
+      {projectToDelete && (
+        <DeleteProjectModal
+          projectName={projectToDelete.name}
+          taskCount={deleteTaskCount}
+          deleting={deleting}
+          error={deleteError}
+          onConfirm={confirmDelete}
+          onCancel={() => {
+            if (!deleting) setProjectToDelete(null)
+          }}
+        />
+      )}
       <div className="start-page-layout">
         <section className="start-page-card start-page-list-card">
           <p className="start-page-eyebrow">{ru.startPage.eyebrow}</p>
@@ -218,7 +307,7 @@ export function ProjectStartPage({
 
           <ul className="start-page-projects">
             {projects.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="start-page-project-row">
                 <button
                   type="button"
                   className={`start-page-project-item ${selectedProjectId === p.id ? 'selected' : ''}`}
@@ -228,6 +317,16 @@ export function ProjectStartPage({
                   {p.description && (
                     <span className="start-page-project-desc">{p.description}</span>
                   )}
+                </button>
+                <button
+                  type="button"
+                  className="start-page-project-delete"
+                  onClick={(e) => requestDelete(p, e)}
+                  disabled={deleting}
+                  aria-label={ru.startPage.delete.action(p.name)}
+                  title={ru.startPage.delete.action(p.name)}
+                >
+                  ×
                 </button>
               </li>
             ))}
@@ -282,6 +381,14 @@ export function ProjectStartPage({
               {selectedProject.description && (
                 <p className="start-page-description">{selectedProject.description}</p>
               )}
+              {selectedProject.jira_epic_url && (
+                <p className="start-page-jira-link">
+                  <span className="start-page-muted">{ru.startPage.jiraEpic}: </span>
+                  <a href={selectedProject.jira_epic_url} target="_blank" rel="noreferrer">
+                    {selectedProject.jira_epic_key ?? selectedProject.jira_epic_url}
+                  </a>
+                </p>
+              )}
 
               <dl className="start-page-stats">
                 <div>
@@ -300,6 +407,14 @@ export function ProjectStartPage({
 
               <button type="button" className="start-page-enter" onClick={onEnter}>
                 {ru.startPage.open}
+              </button>
+              <button
+                type="button"
+                className="start-page-delete-link"
+                onClick={() => requestDelete(selectedProject)}
+                disabled={deleting}
+              >
+                {ru.startPage.delete.button}
               </button>
             </>
           )}

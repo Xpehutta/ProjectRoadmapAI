@@ -39,7 +39,11 @@ export function useProject(projectId: number) {
 export function useCreateProject() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: { name: string; description?: string | null }) => api.createProject(body),
+    mutationFn: (body: {
+      name: string
+      description?: string | null
+      create_jira_epic?: boolean
+    }) => api.createProject(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
   })
 }
@@ -57,6 +61,17 @@ export function useImportProject() {
       description?: string
     }) => api.importProject(file, name, description),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+  })
+}
+
+export function useDeleteProject() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (projectId: number) => api.deleteProject(projectId),
+    onSuccess: (_data, projectId) => {
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.removeQueries({ queryKey: ['project', projectId] })
+    },
   })
 }
 

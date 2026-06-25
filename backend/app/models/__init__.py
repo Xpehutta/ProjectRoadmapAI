@@ -65,6 +65,8 @@ class Project(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     table_schema: Mapped[list | None] = mapped_column(JSON, nullable=True)
     stage_templates: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    jira_epic_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    jira_epic_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     categories: Mapped[list["Category"]] = relationship(back_populates="project", cascade="all, delete-orphan")

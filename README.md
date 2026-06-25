@@ -41,7 +41,8 @@
 
 ### Проекты и данные
 
-- **Несколько проектов** — стартовая страница для выбора или создания проекта
+- **Несколько проектов** — стартовая страница для выбора, создания или **удаления** проекта (с подтверждением)
+- **Интеграция с Jira** — при создании проекта (если настроена) предлагается создать Epic в Jira; ключ и ссылка сохраняются в проекте
 - **Импорт файлов** — перетаскивание на стартовую страницу файлов **.xlsx**, **.xls**, **.json** для создания нового проекта
 - **Гибкий импорт** — произвольные столбцы автоматически сопоставляются с полями задачи; неизвестные сохраняются как пользовательские; формат DataMarts распознаётся автоматически
 - **Импорт из Excel (seed)** — проект **«Витрины данных»** заполняется из `data/DataMarts.xlsx` (столбец Excel **БВ** → категория / столбец **Область** в таблице, **Субпродукт** → **Витрина**, использования по строкам, общие компоненты по Источнику)
@@ -204,8 +205,11 @@ Notebook проверяет `.env`, прямой вызов GigaChat, ассис
 |----------|----------|
 | `GET /api/health` | Проверка работоспособности |
 | `GET /api/projects` | Список проектов |
-| `POST /api/projects` | Создание проекта |
+| `POST /api/projects` | Создание проекта (тело: `name`, `description`, опционально `create_jira_epic: true`) |
+| `DELETE /api/projects/{id}` | Удаление проекта и всех связанных данных |
 | `POST /api/projects/import` | Создание проекта из файла (multipart: `file`, опционально `name`, `description`) |
+| `GET /api/jira/status` | Доступность интеграции с Jira (`configured`, `project_key`) |
+| `POST /api/jira/projects/{id}/epic` | Создать Epic в Jira для существующего проекта |
 | `GET /api/projects/{id}` | Полный проект (задачи, категории, компоненты, релизы, цели, вехи, зависимости, `table_schema`) |
 | `PATCH /api/tasks/{id}` | Обновление задачи (обязателен `version`; возвращает затронутых последователей) |
 | `GET/POST /api/tasks/{id}/sub-stages` | Список или создание этапов (`start_date`, `end_date`, `is_indicative`; пересчёт сроков задачи/компонента) |
@@ -269,6 +273,21 @@ docker compose up --build
 
 API: `GET/POST/DELETE /api/projects/{id}/notifications/...`
 
+### Jira (Epic при создании проекта)
+
+Если в `.env` заданы параметры Jira Cloud, при нажатии **Создать проект** на стартовой странице появится предложение создать **Epic** в указанном Jira-проекте. Ключ и URL Epic сохраняются в карточке проекта дорожной карты.
+
+```bash
+JIRA_URL=https://your-company.atlassian.net
+JIRA_EMAIL=you@company.com
+JIRA_API_TOKEN=your-api-token
+JIRA_PROJECT_KEY=PROJ
+# Опционально, если в вашем Jira обязательно поле Epic Name:
+# JIRA_EPIC_NAME_FIELD=customfield_10011
+```
+
+Без этих переменных проекты создаются как раньше, без диалога Jira. API-токен создаётся в [Atlassian account settings](https://id.atlassian.com/manage-profile/security/api-tokens).
+
 ## Переменные окружения
 
 | Переменная | Значение по умолчанию |
@@ -298,6 +317,16 @@ Email-уведомления (опционально):
 | `SMTP_USE_TLS` | TLS (по умолчанию `true`) |
 | `NOTIFICATION_FROM_EMAIL` | Адрес отправителя |
 | `APP_BASE_URL` | Ссылка на приложение в теле письма |
+
+Jira (опционально):
+
+| Переменная | Описание |
+|------------|----------|
+| `JIRA_URL` | Базовый URL Jira Cloud (например `https://company.atlassian.net`) |
+| `JIRA_EMAIL` | Email учётной записи Atlassian |
+| `JIRA_API_TOKEN` | API-токен для REST API |
+| `JIRA_PROJECT_KEY` | Ключ Jira-проекта, куда создавать Epic |
+| `JIRA_EPIC_NAME_FIELD` | ID кастомного поля Epic Name (если требуется вашим Jira) |
 
 ## Структура проекта
 

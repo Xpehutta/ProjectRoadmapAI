@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models import Category, Dependency, Goal, Milestone, Project, ProjectComponent, Release, Task
 from app.schemas import CategoryOut, DependencyOut, GoalOut, MilestoneOut, ProjectCreate, ProjectDetail, ProjectOut, ReleaseOut
 from app.services.components import component_to_out, load_component
+from app.services.jira import JiraError, create_epic, jira_configured
 from app.services.project_import import import_project_from_upload
 from app.services.table_schema import default_table_schema
 from app.services.tasks import load_task, task_to_out
@@ -24,7 +25,7 @@ def list_projects(db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=ProjectOut, status_code=201)
-def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
+async def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     project = Project(
         name=payload.name,
         description=payload.description,
@@ -33,7 +34,32 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     db.add(project)
     db.commit()
     db.refresh(project)
+
+    if payload.create_jira_epic:
+        if not jira_configured():
+            raise HTTPException(503, "Интеграция с Jira не настроена")
+        try:
+            epic = await create_epic(project.name, project.description)
+        except JiraError as exc:
+            db.delete(project)
+            db.commit()
+            status = 502 if not exc.status_code or exc.status_code >= 500 else exc.status_code
+            raise HTTPException(status, str(exc)) from exc
+        project.jira_epic_key = epic["key"]
+        project.jira_epic_url = epic["url"]
+        db.commit()
+        db.refresh(project)
+
     return project
+
+
+@router.delete("/{project_id}", status_code=204)
+def delete_project(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    db.delete(project)
+    db.commit()
 
 
 @router.post("/import", response_model=ProjectOut, status_code=201)
@@ -105,6 +131,8 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
         description=project.description,
         table_schema=project.table_schema,
         stage_templates=project.stage_templates,
+        jira_epic_key=project.jira_epic_key,
+        jira_epic_url=project.jira_epic_url,
         created_at=project.created_at,
         categories=[CategoryOut.model_validate(c) for c in categories],
         components=[component_to_out(load_component(db, c.id) or c) for c in components],

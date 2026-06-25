@@ -19,7 +19,7 @@ import { ProjectStartPage } from './components/ProjectStartPage'
 import { SaveChangesBar } from './components/SaveChangesBar'
 import { UserNameModal } from './components/UserNameModal'
 import { useStageStatusPrompt } from './hooks/useStageStatusPrompt'
-import { useCreateProject, useImportProject, useProject, useProjects } from './hooks/useProject'
+import { useCreateProject, useDeleteProject, useImportProject, useProject, useProjects } from './hooks/useProject'
 import { useUnsavedChangesWarning } from './hooks/useUnsavedChangesWarning'
 import { useHasAnyPending } from './hooks/useEffectiveTasks'
 import { usePendingChangesStore } from './stores/pendingChangesStore'
@@ -46,8 +46,10 @@ function App() {
   const hasPendingChanges = useHasAnyPending()
   const createProject = useCreateProject()
   const importProject = useImportProject()
+  const deleteProject = useDeleteProject()
   const [importError, setImportError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [showCategories, setShowCategories] = useState(false)
   const [showComponents, setShowComponents] = useState(false)
   const [showReleases, setShowReleases] = useState(false)
@@ -102,12 +104,19 @@ function App() {
           creating={createProject.isPending}
           importing={importProject.isPending}
           importError={importError}
+          deleting={deleteProject.isPending}
+          deleteError={deleteError}
+          onDeleteDialogOpen={() => setDeleteError(null)}
           onRetryProjects={() => void refetchProjects()}
           onSelectProject={handleSelectProject}
-          onCreateProject={(name, description) => {
+          onCreateProject={(name, description, createJiraEpic = false) => {
             setCreateError(null)
             createProject.mutate(
-              { name, description: description || null },
+              {
+                name,
+                description: description || null,
+                create_jira_epic: createJiraEpic,
+              },
               {
                 onSuccess: (created) => {
                   setSelectedProjectId(created.id)
@@ -136,6 +145,25 @@ function App() {
           }}
           onEnter={() => {
             if (activeProjectId) enterProject()
+          }}
+          onDeleteProject={(projectId) => {
+            setDeleteError(null)
+            deleteProject.mutate(projectId, {
+              onSuccess: () => {
+                setDeleteError(null)
+                clearPending()
+                if (projectEntered && activeProjectId === projectId) {
+                  exitProject()
+                }
+                if (selectedProjectId === projectId) {
+                  const remaining = projects.filter((p) => p.id !== projectId)
+                  setSelectedProjectId(remaining[0]?.id ?? null)
+                }
+              },
+              onError: (err) => {
+                setDeleteError(err instanceof Error ? err.message : ru.startPage.delete.error)
+              },
+            })
           }}
         />
       </>

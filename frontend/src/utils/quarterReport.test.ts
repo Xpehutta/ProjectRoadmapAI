@@ -32,6 +32,8 @@ function project(tasks: Task[]): ProjectDetail {
     name: 'P',
     description: null,
     table_schema: null,
+    jira_epic_key: null,
+    jira_epic_url: null,
     created_at: '2024-01-01',
     categories: [],
     components: [],

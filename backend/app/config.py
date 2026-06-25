@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     notification_from_email: str | None = None
     app_base_url: str = "http://localhost:8080"
 
+    # Jira (создание Epic при создании проекта)
+    jira_url: str | None = None
+    jira_email: str | None = None
+    jira_api_token: str | None = None
+    jira_project_key: str | None = None
+    jira_epic_name_field: str | None = None
+
     # Безопасность / развёртывание
     cors_origins: str = "http://localhost:8080,http://localhost:5173"
     require_user_name: bool = False

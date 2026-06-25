@@ -32,6 +32,19 @@ export const ru = {
     apiError: 'Не удалось связаться с сервером. Проверьте, что backend запущен (docker compose up), и обновите страницу.',
     createError: 'Не удалось создать проект',
     retry: 'Повторить',
+    jiraEpic: 'Epic в Jira',
+    delete: {
+      action: (name: string) => `Удалить проект «${name}»`,
+      button: 'Удалить проект',
+      title: (name: string) => `Удалить «${name}»?`,
+      message: 'Проект и все его задачи, категории и связанные данные будут удалены безвозвратно.',
+      tasksWarning: (count: number) =>
+        count === 1 ? 'В проекте 1 задача.' : `В проекте ${count} задач.`,
+      confirm: 'Удалить',
+      deleting: 'Удаление…',
+      cancel: 'Отмена',
+      error: 'Не удалось удалить проект',
+    },
     stats: {
       tasks: 'Задачи',
       categories: 'Категории',
@@ -48,6 +61,17 @@ export const ru = {
       cancelFile: 'Отменить',
       nameFromFile: 'Название проекта',
       invalidType: 'Неподдерживаемый формат. Используйте .xlsx, .xls или .json',
+    },
+  },
+
+  jira: {
+    epicOffer: {
+      title: 'Создать Epic в Jira?',
+      message: (projectKey: string) =>
+        `Интеграция с Jira настроена. Создать Epic в проекте ${projectKey} для нового проекта дорожной карты?`,
+      createWithEpic: 'Создать проект и Epic',
+      createWithoutEpic: 'Только проект',
+      creating: 'Создание проекта и Epic…',
     },
   },
 

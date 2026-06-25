@@ -79,11 +79,17 @@ export class ConflictError extends Error {
 
 export const api = {
   listProjects: () => request<Project[]>('/api/projects'),
-  createProject: (body: { name: string; description?: string | null }) =>
+  createProject: (body: {
+    name: string
+    description?: string | null
+    create_jira_epic?: boolean
+  }) =>
     request<Project>('/api/projects', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  getJiraStatus: () =>
+    request<{ configured: boolean; project_key: string | null }>('/api/jira/status'),
   importProject: (file: File, name?: string, description?: string) => {
     const form = new FormData()
     form.append('file', file)
@@ -95,6 +101,7 @@ export const api = {
     })
   },
   getProject: (id: number) => request<ProjectDetail>(`/api/projects/${id}`),
+  deleteProject: (id: number) => request<void>(`/api/projects/${id}`, { method: 'DELETE' }),
   updateTask: (id: number, body: Record<string, unknown>) =>
     request<TaskPatchResponse>(`/api/tasks/${id}`, {
       method: 'PATCH',

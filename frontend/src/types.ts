@@ -171,6 +171,8 @@ export interface Project {
   name: string
   description: string | null
   table_schema: TableColumnSchema[] | null
+  jira_epic_key: string | null
+  jira_epic_url: string | null
   created_at: string
 }
 
